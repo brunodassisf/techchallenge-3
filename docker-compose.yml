@@ -1,0 +1,57 @@
+services:
+  mongodb:
+    image: mongo:7
+    container_name: techchallenge3-mongodb
+    restart: unless-stopped
+    # Prisma needs to run transactions against MongoDB, which requires the
+    # server to be a replica set (even a single-node one). No auth here —
+    # this is a local-only dev database (not exposed beyond localhost).
+    command: ["--replSet", "rs0", "--bind_ip_all"]
+    ports:
+      - "27018:27017"
+    environment:
+      MONGO_INITDB_DATABASE: techchallenge3
+    volumes:
+      - mongodb_data:/data/db
+    healthcheck:
+      test: mongosh --eval "db.adminCommand('ping')" --quiet
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+  mongodb-init:
+    image: mongo:7
+    container_name: techchallenge3-mongodb-init
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    restart: "no"
+    entrypoint: ["bash", "-c"]
+    command:
+      - |
+        mongosh --host mongodb:27017 --quiet --eval '
+          try {
+            rs.status();
+            print("Replica set already initialized.");
+          } catch (e) {
+            rs.initiate({ _id: "rs0", members: [{ _id: 0, host: "mongodb:27017" }] });
+            print("Replica set initiated.");
+          }
+        '
+
+  mongo-express:
+    image: mongo-express:1
+    container_name: techchallenge3-mongo-express
+    restart: unless-stopped
+    depends_on:
+      - mongodb
+    ports:
+      - "8082:8081"
+    environment:
+      ME_CONFIG_MONGODB_SERVER: mongodb
+      ME_CONFIG_BASICAUTH_USERNAME: admin
+      ME_CONFIG_BASICAUTH_PASSWORD: admin
+
+volumes:
+  mongodb_data:
