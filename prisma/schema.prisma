@@ -15,15 +15,19 @@ datasource db {
 }
 
 model Post {
-  id       String  @id @default(auto()) @map("_id") @db.ObjectId
-  email    String  @unique
-  name     String
-  authors  Author  @relation(fields: [authorId], references: [id])
-  authorId String  @db.ObjectId
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  title     String
+  text      String
+  authors   Author   @relation(fields: [authorId], references: [id])
+  authorId  String   @db.ObjectId
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 model Author {
-  id    String  @id @default(auto()) @map("_id") @db.ObjectId
-  name  String
-  posts Post[]
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  name      String
+  posts     Post[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }

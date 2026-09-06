@@ -14,7 +14,7 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
-    <html lang="pt-br" className={`${robotoSans.variable}`}>
+    <html lang="pt-br" className={`${robotoSans.variable}`} suppressHydrationWarning>
       <body>
         <Provider>{children}</Provider>
       </body>
