@@ -8,8 +8,8 @@ const robotoSans = Roboto({
 });
 
 export const metadata: Metadata = {
-  title: "Tech Challenge 4",
-  description: "Tech Challenge 4",
+  title: "Tech Challenge 3",
+  description: "Tech Challenge 3",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {

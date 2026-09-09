@@ -1,8 +1,18 @@
+import { Container } from "@chakra-ui/react";
+import ListPost from "./ui/ListPost";
+import TitlePage from "./ui/TitlePage";
+import { getAllPosts } from "@/actions/post";
+import { getAllAuthors } from "@/actions/author";
 
-export default function Home() {
+export default async function HomePage() {
+  const [posts, authors] = await Promise.all([getAllPosts(), getAllAuthors()]);
+
   return (
     <main>
-      tech challenge
+      <Container>
+        <TitlePage />
+        <ListPost data={posts} authors={authors} />
+      </Container>
     </main>
   );
 }
