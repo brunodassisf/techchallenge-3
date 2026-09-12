@@ -14,20 +14,50 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-model Post {
+enum Role {
+  ADMIN
+  AUTHOR
+  STUDENT
+}
+
+model User {
   id        String   @id @default(auto()) @map("_id") @db.ObjectId
-  title     String
-  text      String
-  authors   Author   @relation(fields: [authorId], references: [id])
-  authorId  String   @db.ObjectId
+  name      String
+  email     String   @unique
+  hash      String
+  role      Role
+  origemId  String?  @db.ObjectId
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+  authors   Author?
+  students  Student?
 }
 
 model Author {
   id        String   @id @default(auto()) @map("_id") @db.ObjectId
   name      String
   posts     Post[]
+  user      User?    @relation(fields: [userId], references: [id])
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  userId    String?  @unique @db.ObjectId
+}
+
+model Student {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  name      String
+  user      User     @relation(fields: [userId], references: [id])
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  userId    String   @db.ObjectId @unique
+}
+
+model Post {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  title     String
+  text      String
+  authors   Author   @relation(fields: [authorId], references: [id])
+  authorId  String   @db.ObjectId
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }

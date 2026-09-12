@@ -6,14 +6,17 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "db:seed": "tsx prisma/seed.ts"
   },
   "dependencies": {
     "@chakra-ui/react": "^3.37.0",
     "@emotion/react": "^11.14.0",
     "@prisma/client": "6.19",
     "@react-icons/all-files": "^4.1.0",
+    "bcryptjs": "^3.0.3",
     "dotenv": "^17.4.2",
+    "jose": "^6.2.12",
     "next": "16.3.4",
     "next-themes": "^0.4.6",
     "react": "19.2.8",
@@ -28,6 +31,7 @@
     "eslint": "^9",
     "eslint-config-next": "16.3.4",
     "prisma": "6.19",
+    "tsx": "^4.23.13",
     "typescript": "^5"
   }
 }
