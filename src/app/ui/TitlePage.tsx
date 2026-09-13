@@ -4,6 +4,7 @@ import { Box, Flex, Separator, Text } from "@chakra-ui/react";
 import { RiNextjsLine } from "react-icons/ri";
 import ModalLogin from "./ModalLogin";
 import UserMenu from "./UserMenu";
+import { SessionProvider } from "./SessionContext";
 
 const TitlePage: React.FC = async () => {
     const session = await getSession();
@@ -19,7 +20,9 @@ const TitlePage: React.FC = async () => {
                     <Text fontSize={{ base: 'lg', lg: '2xl' }} fontWeight={700}>Tech Challenge 3</Text>
                 </Flex>
                 {session ? (
-                    <UserMenu name={session.name} role={session.role} />
+                    <SessionProvider value={{ name: session.name, role: session.role }}>
+                        <UserMenu />
+                    </SessionProvider>
                 ) : (
                     <ModalLogin />
                 )}

@@ -5,16 +5,12 @@ import { CloseButton, Drawer, Portal, Separator } from "@chakra-ui/react"
 import { Box, Button, Flex, Text } from "@chakra-ui/react"
 import { useRouter } from "next/navigation"
 import { logout } from "@/lib/client-auth"
-import { Role } from "../../../generated/prisma/client"
+import { useSession } from "./SessionContext"
 import { useState } from "react";
 
-interface UserMenuProps {
-    name: string
-    role: Role
-}
-
-const Sidebar: React.FC<UserMenuProps> = ({ name, role }) => {
+const Sidebar: React.FC = () => {
     const router = useRouter()
+    const { name, role } = useSession()
 
     const [open, setOpen] = useState(false)
 

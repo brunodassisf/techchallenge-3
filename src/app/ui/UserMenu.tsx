@@ -3,16 +3,12 @@
 import { Box, Button, Flex, Link, Text } from "@chakra-ui/react"
 import { useRouter } from "next/navigation"
 import { logout } from "@/lib/client-auth"
-import { Role } from "../../../generated/prisma/client"
+import { useSession } from "./SessionContext"
 import Sidebar from "./Sidebar"
 
-interface UserMenuProps {
-    name: string
-    role: Role
-}
-
-const UserMenu: React.FC<UserMenuProps> = ({ name, role }) => {
+const UserMenu: React.FC = () => {
     const router = useRouter()
+    const { name, role } = useSession()
 
     return (
         <Box>
@@ -24,7 +20,7 @@ const UserMenu: React.FC<UserMenuProps> = ({ name, role }) => {
                     <Text textDecoration="underline" cursor="pointer" onClick={() => logout(router)}>Sair</Text>
                 </Flex>
             </Box>
-            <Sidebar name={name} role={role} />
+            <Sidebar />
         </Box>
     )
 }
