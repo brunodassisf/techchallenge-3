@@ -1,35 +1,34 @@
 'use client'
 
-import { Box, Field, Flex, Input, Portal, Select, Stack, Text, createListCollection } from "@chakra-ui/react";
-import { RiFileList3Line } from "react-icons/ri";
-import { PostWithAuthor } from "@/actions/post";
-import { Author } from "../../../generated/prisma/client";
+import { Box, createListCollection, Field, Flex, Input, Portal, Select, Stack, Text } from "@chakra-ui/react";
+import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
+import { RiFileList3Line } from "react-icons/ri";
+import { Author, Post } from "../../../generated/prisma/client";
 import { useMemo, useState } from "react";
+import { getPosts } from "@/services/post";
+import { getAuthors } from "@/services/author";
 
-interface ListPostProps {
-    data: PostWithAuthor[];
-    authors: Author[];
-}
 
-const ListPost: React.FC<ListPostProps> = ({ data, authors }) => {
+const ListPost: React.FC = () => {
     const [selectedAuthor, setSelectedAuthor] = useState<string[]>([]);
-    const [searchKeyWord, setSearchKeyWord] = useState("");
+    const [searchKeyWord, setSearchKeyWord] = useState<string>('');
+
+    const [authorId] = selectedAuthor;
+
+    const { data } = useQuery<Post[]>({
+        queryKey: ['posts', authorId ?? '', searchKeyWord],
+        queryFn: () => getPosts(authorId ?? '', searchKeyWord),
+    })
+    const { data: authors } = useQuery<Author[]>({ queryKey: ['getAuthors'], queryFn: () => getAuthors() })
 
     const authorCollection = useMemo(
         () =>
             createListCollection({
-                items: authors.map((author) => ({ label: author.name, value: author.id })),
+                items: (authors ?? []).map((author) => ({ label: author.name, value: author.id })),
             }),
         [authors]
     );
-
-    const filteredPosts = useMemo(() => {
-        const [authorId] = selectedAuthor;
-        if (!authorId && searchKeyWord === '') return data;
-        const searchWordLower = searchKeyWord.toLowerCase();
-        return data.filter((post) => post.authorId === authorId || post.text.toLowerCase().includes(searchWordLower) || post.title.toLowerCase().includes(searchWordLower));
-    }, [data, selectedAuthor, searchKeyWord]);
 
     return (
         <Stack>
@@ -80,10 +79,10 @@ const ListPost: React.FC<ListPostProps> = ({ data, authors }) => {
                 </Flex>
             </Box>
             <Stack mx="24px" gap={3}>
-                {filteredPosts.length === 0 && (
-                    <Text color="fg.muted">Nenhum post encontrado para este professor.</Text>
+                {data?.length === 0 && (
+                    <Text color="fg.muted">Nenhum post encontrado.</Text>
                 )}
-                {filteredPosts.map((item) => (
+                {data?.map((item) => (
                     <Link href={`/${item.id}`} key={item.id}>
                         <Box border="sm" p={4} px={10}>
                             <Text fontSize="lg" fontWeight={600} mb={3}>{item.title}</Text>

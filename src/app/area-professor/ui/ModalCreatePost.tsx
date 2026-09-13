@@ -2,38 +2,36 @@
 
 import { FormState } from "@/lib/definition"
 import { toaster } from "@/components/ui/toaster"
-import usePasswordVisibility from "@/hook/usePasswordVisibility"
-import { Button, Dialog, Field, Input, InputGroup, Portal, Stack } from "@chakra-ui/react"
+import { Box, Button, Dialog, Field, Flex, Input, Portal, Stack, Textarea } from "@chakra-ui/react"
 import { useRouter } from "next/navigation"
 import { useActionState, useEffect, useState } from "react"
 
-const ModalLogin: React.FC = () => {
-    const inputPassword = usePasswordVisibility()
+const ModalCreatePost: React.FC = () => {
     const router = useRouter()
     const [open, setOpen] = useState(false)
 
-    async function login(_prevState: FormState, formData: FormData): Promise<FormState> {
-        const res = await fetch("/api/auth/login", {
+    async function createPost(_prevState: FormState, formData: FormData): Promise<FormState> {
+        const res = await fetch("/api/post", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
-                email: formData.get("email"),
-                password: formData.get("password"),
+                title: formData.get("title"),
+                text: formData.get("text"),
             }),
         })
         const body = await res.json()
 
         if (!res.ok) {
             if (body.errors) return { errors: body.errors }
-            return { ok: false, message: body.error ?? "Erro ao entrar." }
+            return { ok: false, message: body.error ?? "Erro ao criar o post." }
         }
 
         setOpen(false)
         router.refresh()
-        return undefined
+        return { ok: true, message: body.message }
     }
 
-    const [state, action, pending] = useActionState(login, undefined);
+    const [state, action, pending] = useActionState(createPost, undefined);
     const toggleModal = () => setOpen(!open)
 
     useEffect(() => {
@@ -56,7 +54,9 @@ const ModalLogin: React.FC = () => {
             onOpenChange={(details) => setOpen(details.open)}
         >
             <Dialog.Trigger asChild>
-                <Button variant="outline">Entrar</Button>
+                <Flex justify="end" mt={5}>
+                    <Button>Criar Post</Button>
+                </Flex>
             </Dialog.Trigger>
             <Portal>
                 <Dialog.Backdrop />
@@ -64,36 +64,32 @@ const ModalLogin: React.FC = () => {
                     <Dialog.Content>
                         <form action={action}>
                             <Dialog.Header>
-                                <Dialog.Title>Login</Dialog.Title>
+                                <Dialog.Title>Criar postagem</Dialog.Title>
                             </Dialog.Header>
                             <Dialog.Body pb="4">
                                 <Stack gap="4">
                                     <Field.Root>
-                                        <Field.Label>E-mail</Field.Label>
+                                        <Field.Label>Título</Field.Label>
                                         <Input
-                                            name="email"
-                                            type="email"
-                                            placeholder="email@exemplo.com"
+                                            name="title"
+                                            placeholder="Título do post"
                                         />
                                     </Field.Root>
                                     <Field.Root>
-                                        <Field.Label>Senha</Field.Label>
-                                        <InputGroup endElement={inputPassword.endElement}>
-                                            <Input
-                                                id="password"
-                                                name="password"
-                                                type={inputPassword.type}
-                                                placeholder="Digite sua nova senha"
-                                            />
-                                        </InputGroup>
+                                        <Field.Label>Conteúdo</Field.Label>
+                                        <Textarea
+                                            name="text"
+                                            placeholder="Escreva o conteúdo do post"
+                                            rows={6}
+                                        />
                                     </Field.Root>
                                 </Stack>
                             </Dialog.Body>
                             <Dialog.Footer>
                                 <Dialog.ActionTrigger asChild>
-                                    <Button variant="outline" onClick={toggleModal}>Fechar</Button>
+                                    <Button variant="outline" onClick={toggleModal}>Cancelar</Button>
                                 </Dialog.ActionTrigger>
-                                <Button type="submit" loading={pending}>Entrar</Button>
+                                <Button type="submit" loading={pending}>Publicar</Button>
                             </Dialog.Footer>
                         </form>
                     </Dialog.Content>
@@ -103,4 +99,4 @@ const ModalLogin: React.FC = () => {
     )
 }
 
-export default ModalLogin;
+export default ModalCreatePost;

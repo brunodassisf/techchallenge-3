@@ -4,7 +4,7 @@ import { FaBars } from "react-icons/fa";
 import { CloseButton, Drawer, Portal, Separator } from "@chakra-ui/react"
 import { Box, Button, Flex, Text } from "@chakra-ui/react"
 import { useRouter } from "next/navigation"
-import { logout } from "@/actions/auth"
+import { logout } from "@/lib/client-auth"
 import { Role } from "../../../generated/prisma/client"
 import { useState } from "react";
 
@@ -48,7 +48,7 @@ const Sidebar: React.FC<UserMenuProps> = ({ name, role }) => {
                                 </Box>
                             </Drawer.Body>
                             <Drawer.Footer>
-                                <Button onClick={logout}>Sair</Button>
+                                <Button onClick={() => logout(router)}>Sair</Button>
                             </Drawer.Footer>
                             <Drawer.CloseTrigger asChild>
                                 <CloseButton size="sm" />
