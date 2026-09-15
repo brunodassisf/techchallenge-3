@@ -374,3 +374,5 @@ A resposta inclui um header `Set-Cookie: session=...` — reenvie esse cookie na
 - [ ] Unificar a origem do tipo `Post` em `src/services/post.ts` (importado de `generated/prisma/browser`, enquanto o restante do projeto usa `generated/prisma/client`).
 - [ ] Testes automatizados (unitários para Route Handlers e end-to-end para os fluxos de login, criação/edição/exclusão de posts e autores).
 - [ ] Estados de carregamento e de erro explícitos nas páginas/listas que buscam dados assíncronos.
+- [ ] Implementar a criação dos perfis de Professor e Estudantes para receberem um e-mail e fazendo com que eles criem sua senha de acesso.
+

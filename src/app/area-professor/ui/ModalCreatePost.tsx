@@ -3,11 +3,11 @@
 import { FormState } from "@/lib/definition"
 import { toaster } from "@/components/ui/toaster"
 import { Box, Button, Dialog, Field, Flex, Input, Portal, Stack, Textarea } from "@chakra-ui/react"
-import { useRouter } from "next/navigation"
+import { useQueryClient } from "@tanstack/react-query"
 import { useActionState, useEffect, useState } from "react"
 
-const ModalCreatePost: React.FC = () => {
-    const router = useRouter()
+const ModalCreatePost: React.FC<{ authorId?: string | null }> = ({ authorId }) => {
+    const queryClient = useQueryClient()
     const [open, setOpen] = useState(false)
 
     async function createPost(_prevState: FormState, formData: FormData): Promise<FormState> {
@@ -27,7 +27,7 @@ const ModalCreatePost: React.FC = () => {
         }
 
         setOpen(false)
-        router.refresh()
+        queryClient.invalidateQueries({ queryKey: ["postsByAuthorId", authorId] })
         return { ok: true, message: body.message }
     }
 

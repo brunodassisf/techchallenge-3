@@ -13,7 +13,7 @@ export default async function ProfessorDashboardPage() {
         <main>
             <Container>
                 <TitlePage />
-                <ModalCreatePost />
+                <ModalCreatePost authorId={authorId} />
                 <ListPostsAuthor authorId={authorId} />
             </Container>
         </main>
