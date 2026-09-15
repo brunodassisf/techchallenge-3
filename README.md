@@ -243,7 +243,7 @@ model Post {
 **Pré-requisitos**
 
 - [Node.js](https://nodejs.org) 20 ou superior
-- Uma instância do MongoDB acessível (local ou [Atlas](https://www.mongodb.com/atlas))
+- Uma instância do MongoDB acessível (local ou [Atlas](https://www.mongodb.com/atlas)) — o repositório inclui um `docker-compose.yml` para levantar um MongoDB local (com replica set já configurado, exigido pelo Prisma para transações) e o [Docker](https://www.docker.com/) para usá-lo
 
 **Passo a passo**
 
@@ -267,18 +267,23 @@ Crie um arquivo `.env` na raiz do projeto com as variáveis abaixo (sem elas a a
 | `ADMIN_NAME` | Nome de exibição do usuário administrador |
 
 ```bash
-# 3. Gerar o cliente Prisma
+# 3. Criar as imagens e subir os containers do MongoDB (via Docker Compose)
+docker compose up -d --build
+
+# 4. Gerar o cliente Prisma
 npx prisma generate
 
-# 4. Sincronizar o schema com o banco
+# 5. Sincronizar o schema com o banco
 npx prisma db push
 
-# 5. Criar o usuário administrador inicial
+# 6. Criar o usuário administrador inicial
 npm run db:seed
 
-# 6. Rodar o servidor de desenvolvimento
+# 7. Rodar o servidor de desenvolvimento
 npm run dev
 ```
+
+O comando `docker compose up -d --build` cria as imagens (baixando `mongo:7` e `mongo-express:1`, caso ainda não existam localmente) e sobe três containers: o MongoDB (`techchallenge3-mongodb`, já configurado como replica set de nó único, requisito do Prisma para transações), um container auxiliar que inicializa esse replica set (`techchallenge3-mongodb-init`) e o [Mongo Express](https://github.com/mongo-express/mongo-express) (`techchallenge3-mongo-express`, interface web em [http://localhost:8082](http://localhost:8082) para inspecionar o banco). Se estiver usando essa infraestrutura local, aponte `DATABASE_URL` para `mongodb://localhost:27018/techchallenge3?replicaSet=rs0`. Caso já tenha uma instância própria do MongoDB (local ou Atlas), pule este passo e aponte `DATABASE_URL` diretamente para ela.
 
 A aplicação fica disponível em [http://localhost:3000](http://localhost:3000). Faça login com o e-mail/senha definidos em `ADMIN_EMAIL`/`ADMIN_PASSWORD` para acessar `/admin` e cadastrar professores(as) — cada professor(a) cadastrado(a) pode então fazer login e acessar `/area-professor` para publicar posts.
 
