@@ -2,9 +2,15 @@ import "server-only"
 import { cookies, headers } from "next/headers"
 
 async function getBaseUrl() {
+    // Em container (Docker) o servidor deve chamar a si mesmo por HTTP interno,
+    // independente do host/protocolo que o navegador usou. Ex.: http://localhost:3000
+    if (process.env.INTERNAL_API_URL) return process.env.INTERNAL_API_URL
+
     const headersList = await headers()
     const host = headersList.get("host")
-    const protocol = process.env.NODE_ENV === "production" ? "https" : "http"
+    const protocol =
+        headersList.get("x-forwarded-proto") ??
+        (process.env.NODE_ENV === "production" ? "https" : "http")
     return `${protocol}://${host}`
 }
 

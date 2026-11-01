@@ -2,7 +2,7 @@
 
 import { FormState } from "@/lib/definition"
 import { toaster } from "@/components/ui/toaster"
-import { Box, Button, Dialog, Field, Flex, Input, Portal, Stack, Textarea } from "@chakra-ui/react"
+import { Button, Dialog, Field, Flex, Input, Portal, Stack, Textarea } from "@chakra-ui/react"
 import { useQueryClient } from "@tanstack/react-query"
 import { useActionState, useEffect, useState } from "react"
 

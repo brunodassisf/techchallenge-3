@@ -1,6 +1,6 @@
 import { Container } from "@chakra-ui/react";
 
-import { getAllPosts, getPostId } from "@/actions/post";
+import { getPostId } from "@/actions/post";
 import TitlePage from "../ui/TitlePage";
 import ViewPost from "./ui/ViewPost";
 import { redirect } from "next/navigation";

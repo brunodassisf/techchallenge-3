@@ -1,6 +1,6 @@
 "use client"
 
-import { Box, Button, Flex, Link, Text } from "@chakra-ui/react"
+import { Box, Flex, Link, Text } from "@chakra-ui/react"
 import { useRouter } from "next/navigation"
 import { logout } from "@/lib/client-auth"
 import { useSession } from "./SessionContext"

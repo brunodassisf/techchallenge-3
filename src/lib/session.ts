@@ -6,6 +6,13 @@ import { SessionPayload } from './definition'
 const secretKey = process.env.SESSION_SECRET
 const encodedKey = new TextEncoder().encode(secretKey)
 
+// Por padrão o cookie é "secure" em produção (exige HTTPS). Em ambientes de
+// produção servidos por HTTP puro — como o container Docker local — defina
+// COOKIE_SECURE=false para que o navegador aceite o cookie de sessão.
+const secureCookie = process.env.COOKIE_SECURE
+    ? process.env.COOKIE_SECURE === 'true'
+    : process.env.NODE_ENV === 'production'
+
 export async function encrypt(payload: SessionPayload) {
     return new SignJWT(payload)
         .setProtectedHeader({ alg: 'HS256' })
@@ -37,7 +44,7 @@ export async function createSession(userId: string, role: SessionPayload['role']
 
     cookieSession.set('session', session, {
         httpOnly: true,
-        secure: process.env.NODE_ENV === 'production',
+        secure: secureCookie,
         expires: expiresAt,
         sameSite: 'lax',
         path: '/',
@@ -54,7 +61,7 @@ export async function updateSession() {
     const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
     cookieStore.set('session', session, {
         httpOnly: true,
-        secure: process.env.NODE_ENV === 'production',
+        secure: secureCookie,
         expires: expiresAt,
         sameSite: 'lax',
         path: '/',

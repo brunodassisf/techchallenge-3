@@ -2,9 +2,7 @@ import "server-only"
 import { cookies } from "next/headers"
 import { cache } from "react"
 import { decrypt } from "./session"
-import { redirect } from "next/navigation"
 import { db } from "./prisma"
-import { SessionPayload } from "./definition"
 import { User } from "../../generated/prisma/client"
 
 export const verifySession = cache(async () => {

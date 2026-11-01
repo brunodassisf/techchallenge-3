@@ -1,0 +1,26 @@
+# Dependências e artefatos de build são recriados dentro da imagem
+node_modules
+.next
+out
+build
+generated
+coverage
+*.tsbuildinfo
+next-env.d.ts
+
+# Segredos nunca entram na imagem (variáveis vêm do docker-compose)
+.env*
+
+# Controle de versão, CI, editor e Docker
+.git
+.github
+.vscode
+.idea
+Dockerfile
+docker-compose.yml
+.dockerignore
+
+# Diversos
+npm-debug.log*
+.DS_Store
+*.md

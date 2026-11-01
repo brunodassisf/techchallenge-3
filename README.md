@@ -6,6 +6,7 @@
 [![Chakra UI](https://img.shields.io/badge/Chakra%20UI-3.37-319795?logo=chakraui)](https://chakra-ui.com)
 [![Prisma](https://img.shields.io/badge/Prisma-6.19-2D3748?logo=prisma)](https://www.prisma.io)
 [![MongoDB](https://img.shields.io/badge/MongoDB-Database-47A248?logo=mongodb)](https://www.mongodb.com)
+[![CI](https://github.com/brunodassisf/techchallenge-3/actions/workflows/ci.yml/badge.svg)](https://github.com/brunodassisf/techchallenge-3/actions/workflows/ci.yml)
 
 Plataforma de blogging acadêmico full-stack construída em Next.js. Possui autenticação própria com três papéis de usuário (administrador, professor(a) e estudante), área administrativa para cadastro de professores(as), área do(a) professor(a) para publicar e gerenciar seus próprios posts, e uma página inicial pública onde qualquer visitante pode navegar, pesquisar e ler os posts.
 
@@ -19,6 +20,8 @@ Plataforma de blogging acadêmico full-stack construída em Next.js. Possui aute
 - [Modelo de dados](#modelo-de-dados)
 - [Dependências principais](#dependências-principais)
 - [Como instalar e rodar](#como-instalar-e-rodar)
+- [Docker](#docker)
+- [Integração contínua (GitHub Actions)](#integração-contínua-github-actions)
 - [Telas](#telas)
 - [Endpoints (API Reference)](#endpoints-api-reference)
 - [Roadmap / Melhorias futuras](#roadmap--melhorias-futuras)
@@ -267,8 +270,9 @@ Crie um arquivo `.env` na raiz do projeto com as variáveis abaixo (sem elas a a
 | `ADMIN_NAME` | Nome de exibição do usuário administrador |
 
 ```bash
-# 3. Criar as imagens e subir os containers do MongoDB (via Docker Compose)
-docker compose up -d --build
+# 3. Subir apenas os containers do MongoDB (via Docker Compose)
+#    (para rodar TUDO em containers, veja a seção "Docker")
+docker compose up -d mongodb mongodb-init mongo-express
 
 # 4. Gerar o cliente Prisma
 npx prisma generate
@@ -283,7 +287,7 @@ npm run db:seed
 npm run dev
 ```
 
-O comando `docker compose up -d --build` cria as imagens (baixando `mongo:7` e `mongo-express:1`, caso ainda não existam localmente) e sobe três containers: o MongoDB (`techchallenge3-mongodb`, já configurado como replica set de nó único, requisito do Prisma para transações), um container auxiliar que inicializa esse replica set (`techchallenge3-mongodb-init`) e o [Mongo Express](https://github.com/mongo-express/mongo-express) (`techchallenge3-mongo-express`, interface web em [http://localhost:8082](http://localhost:8082) para inspecionar o banco). Se estiver usando essa infraestrutura local, aponte `DATABASE_URL` para `mongodb://localhost:27018/techchallenge3?replicaSet=rs0`. Caso já tenha uma instância própria do MongoDB (local ou Atlas), pule este passo e aponte `DATABASE_URL` diretamente para ela.
+Esse comando baixa as imagens `mongo:7` e `mongo-express:1` (caso ainda não existam localmente) e sobe três containers: o MongoDB (`techchallenge3-mongodb`, já configurado como replica set de nó único, requisito do Prisma para transações), um container auxiliar que inicializa esse replica set (`techchallenge3-mongodb-init`) e o [Mongo Express](https://github.com/mongo-express/mongo-express) (`techchallenge3-mongo-express`, interface web em [http://localhost:8082](http://localhost:8082) para inspecionar o banco). Se estiver usando essa infraestrutura local, aponte `DATABASE_URL` para `mongodb://localhost:27018/techchallenge3?replicaSet=rs0`. Caso já tenha uma instância própria do MongoDB (local ou Atlas), pule este passo e aponte `DATABASE_URL` diretamente para ela.
 
 A aplicação fica disponível em [http://localhost:3000](http://localhost:3000). Faça login com o e-mail/senha definidos em `ADMIN_EMAIL`/`ADMIN_PASSWORD` para acessar `/admin` e cadastrar professores(as) — cada professor(a) cadastrado(a) pode então fazer login e acessar `/area-professor` para publicar posts.
 
@@ -296,6 +300,42 @@ A aplicação fica disponível em [http://localhost:3000](http://localhost:3000)
 | `npm run start` | Sobe o servidor a partir do build de produção |
 | `npm run lint` | Executa o ESLint no projeto |
 | `npm run db:seed` | Cria (ou atualiza) o usuário `ADMIN` inicial a partir do `.env` |
+
+## Docker
+
+A aplicação inteira (Next.js + MongoDB) sobe com **um único comando**, sem precisar de Node.js instalado na máquina — só do [Docker](https://www.docker.com/):
+
+```bash
+docker compose up -d --build
+```
+
+Depois disso a aplicação fica em [http://localhost:3000](http://localhost:3000) e o Mongo Express em [http://localhost:8082](http://localhost:8082) (usuário/senha `admin`/`admin`). Para derrubar tudo: `docker compose down` (adicione `-v` para apagar também os dados do banco).
+
+O `docker-compose.yml` orquestra os serviços nesta ordem:
+
+| Serviço | O que faz |
+| --- | --- |
+| `mongodb` | MongoDB 7 como replica set de nó único (exigido pelo Prisma para transações), exposto em `localhost:27018` |
+| `mongodb-init` | Inicializa o replica set, espera o nó virar primário e encerra |
+| `migrate` | Roda `prisma db push` (sincroniza o schema) e `npm run db:seed` (cria o admin) e encerra |
+| `app` | A aplicação Next.js em produção, na porta `3000`, com healthcheck |
+| `mongo-express` | Interface web para inspecionar o banco |
+
+O `Dockerfile` é *multi-stage*: um estágio instala as dependências (`npm ci`), outro gera o Prisma Client e roda o `next build` com `output: "standalone"`, e o estágio final (`runner`) leva só o servidor mínimo gerado pelo Next, sem devDependencies, executando como usuário não-root. O serviço `migrate` reaproveita o estágio de build, que já contém o Prisma CLI.
+
+**Variáveis de ambiente no Docker:** o Compose já define `DATABASE_URL` apontando para o container do MongoDB. `SESSION_SECRET`, `ADMIN_EMAIL`, `ADMIN_PASSWORD` e `ADMIN_NAME` são lidos do `.env` da raiz, se existir; caso contrário são usados valores padrão de desenvolvimento (admin `admin@techchallenge.com` / `admin123`). Duas variáveis extras existem para rodar em produção sem HTTPS:
+
+| Variável | Descrição |
+| --- | --- |
+| `INTERNAL_API_URL` | URL usada pelo servidor para chamar as próprias rotas `/api` (no container: `http://localhost:3000`). Se ausente, é derivada do host da requisição |
+| `COOKIE_SECURE` | `false` permite o cookie de sessão sem HTTPS. Se ausente, o cookie é `secure` apenas em produção |
+
+## Integração contínua (GitHub Actions)
+
+O workflow [`.github/workflows/ci.yml`](.github/workflows/ci.yml) roda a cada push e pull request na `master` (e pode ser disparado manualmente na aba *Actions*). Ele tem dois jobs:
+
+1. **Lint, type-check e build** — `npm ci`, `prisma generate`, `npm run lint`, `tsc --noEmit` e `npm run build`.
+2. **Docker build + smoke test** — só roda se o primeiro passar: constrói as imagens, sobe a stack completa com `docker compose up --wait` e faz requisições a `/`, `/api/post` e `/api/author`, exibindo os logs dos containers caso algo falhe.
 
 ## Telas
 

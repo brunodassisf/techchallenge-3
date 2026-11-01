@@ -1,6 +1,6 @@
 import { Box, Flex, Separator, Stack, Text } from "@chakra-ui/react";
 import { PostWithAuthor } from "@/actions/post";
-import { FaArrowCircleLeft, FaArrowLeft } from "react-icons/fa";
+import { FaArrowLeft } from "react-icons/fa";
 import Link from "next/link";
 
 const ViewPost: React.FC<{ data: PostWithAuthor }> = ({ data }) => {
