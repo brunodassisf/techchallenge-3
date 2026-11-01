@@ -299,6 +299,7 @@ A aplicação fica disponível em [http://localhost:3000](http://localhost:3000)
 | `npm run build` | Gera o build de produção |
 | `npm run start` | Sobe o servidor a partir do build de produção |
 | `npm run lint` | Executa o ESLint no projeto |
+| `npm run typecheck` | Gera os tipos de rotas do Next (`next typegen`) e roda o `tsc --noEmit` |
 | `npm run db:seed` | Cria (ou atualiza) o usuário `ADMIN` inicial a partir do `.env` |
 
 ## Docker
@@ -334,7 +335,7 @@ O `Dockerfile` é *multi-stage*: um estágio instala as dependências (`npm ci`)
 
 O workflow [`.github/workflows/ci.yml`](.github/workflows/ci.yml) roda a cada push e pull request na `master` (e pode ser disparado manualmente na aba *Actions*). Ele tem dois jobs:
 
-1. **Lint, type-check e build** — `npm ci`, `prisma generate`, `npm run lint`, `tsc --noEmit` e `npm run build`.
+1. **Lint, type-check e build** — `npm ci`, `prisma generate`, `npm run lint`, `npm run typecheck` (`next typegen` + `tsc --noEmit`) e `npm run build`.
 2. **Docker build + smoke test** — só roda se o primeiro passar: constrói as imagens, sobe a stack completa com `docker compose up --wait` e faz requisições a `/`, `/api/post` e `/api/author`, exibindo os logs dos containers caso algo falhe.
 
 ## Telas

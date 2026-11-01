@@ -45,8 +45,10 @@ jobs:
       - name: Lint (ESLint)
         run: npm run lint
 
+      # next typegen gera os tipos globais do App Router (LayoutProps, PageProps...)
+      # em .next/types; sem ele o tsc falha num checkout limpo.
       - name: Type-check (TypeScript)
-        run: npx tsc --noEmit
+        run: npm run typecheck
 
       - name: Build de produção (Next.js)
         run: npm run build
