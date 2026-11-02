@@ -42,7 +42,7 @@ O objetivo é desenvolver uma interface gráfica para a aplicação de blogging 
 
 - **Listagem de posts** — todos os posts cadastrados, exibindo título e um resumo do conteúdo.
 - **Filtro por professor(a)** — seletor com a lista de autores(as) para restringir os posts exibidos a um único professor.
-- **Busca por palavra-chave** — campo de texto que filtra posts pelo título ou pelo corpo do texto (os dois filtros combinam entre si).
+- **Busca por palavra-chave** — campo de texto que filtra posts pelo título, pelo corpo do texto ou pelo nome do(a) professor(a) (os dois filtros combinam entre si).
 - **Detalhe do post** — página dedicada com o conteúdo completo e o nome do(a) professor(a) responsável.
 - **Tema claro/escuro** — alternância de tema persistida entre sessões, com suporte à preferência do sistema operacional.
 - **Login/Cadastro** — modal de login com sessão persistida em cookie.
@@ -141,11 +141,14 @@ Componente interativo (Client)  →  fetch (src/services, useQuery/useMutation) 
 
 A aplicação usa autenticação própria (sem provedor externo), baseada em sessão assinada:
 
-- **Login** (`POST /api/auth/login`) valida e-mail/senha, compara a senha com o hash salvo (`bcryptjs`) e, se válido, assina um JWT (HS256, biblioteca `jose`, segredo em `SESSION_SECRET`) contendo `{ userId, role, expiresAt }`. O token é gravado em um cookie `session` (`httpOnly`, `sameSite=lax`, expira em 7 dias).
-- **Logout** (`POST /api/auth/logout`) apenas remove o cookie `session`.
+- **Login** (`POST /api/auth/login`) valida e-mail/senha, compara a senha com o hash salvo (`bcryptjs`) e, se válido, assina um JWT (HS256, biblioteca `jose`, segredo em `SESSION_SECRET`) contendo `{ userId, role, expiresAt }`. O token é gravado em um cookie `session` (`httpOnly`, `sameSite=lax`, expira em 7 dias) **e** devolvido no corpo da resposta (`token`), para uso por clientes externos.
+- **Logout** (`POST /api/auth/logout`) apenas remove o cookie `session`. Para quem usa Bearer token, o JWT é *stateless*: basta descartá-lo no cliente (ele expira sozinho em 7 dias).
+- **Duas formas de enviar o token** em rotas autenticadas — o servidor aceita qualquer uma (o header tem prioridade):
+  - **Cookie `session`** — usado automaticamente pelo front-end Next (navegador).
+  - **Header `Authorization: Bearer <token>`** — para clientes fora da aplicação Next: Postman, apps mobile, outros serviços.
 - `src/lib/dal.ts` expõe duas formas de ler a sessão atual:
-  - `verifySession()` — decodifica o JWT do cookie e devolve só o payload assinado (`userId`, `role`, `expiresAt`), sem consultar o banco.
-  - `getSession()` — decodifica o cookie e busca o registro `User` completo no banco (usado por toda a API e pelas páginas que precisam do usuário logado).
+  - `verifySession()` — decodifica o JWT (do header `Authorization` ou do cookie) e devolve só o payload assinado (`userId`, `role`, `expiresAt`), sem consultar o banco.
+  - `getSession()` — decodifica o JWT (header ou cookie) e busca o registro `User` completo no banco (usado por toda a API e pelas páginas que precisam do usuário logado).
 
 ### Papéis (`Role`)
 
@@ -209,8 +212,21 @@ model Post {
   text      String
   authors   Author   @relation(fields: [authorId], references: [id])
   authorId  String   @db.ObjectId
+  category  Category @default(GERAL)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+}
+
+enum Category {
+  MATEMATICA
+  PORTUGUES
+  CIENCIAS
+  HISTORIA
+  GEOGRAFIA
+  INGLES
+  ARTES
+  EDUCACAO_FISICA
+  GERAL
 }
 ```
 
@@ -301,6 +317,7 @@ A aplicação fica disponível em [http://localhost:3000](http://localhost:3000)
 | `npm run lint` | Executa o ESLint no projeto |
 | `npm run typecheck` | Gera os tipos de rotas do Next (`next typegen`) e roda o `tsc --noEmit` |
 | `npm run db:seed` | Cria (ou atualiza) o usuário `ADMIN` inicial a partir do `.env` |
+| `npm run db:backfill-category` | Grava `category: "GERAL"` nos posts criados antes de o campo existir (idempotente) |
 
 ## Docker
 
@@ -345,7 +362,9 @@ O workflow [`.github/workflows/ci.yml`](.github/workflows/ci.yml) roda a cada pu
 Cabeçalho com alternância de tema e, dependendo da sessão, um botão de login (visitante) ou o menu do usuário logado (nome, atalho para o dashboard do seu papel e "Sair"). Abaixo, a listagem de todos os posts cadastrados, exibindo título e um resumo do conteúdo, com dois controles de filtragem combináveis:
 
 - um **select** com a lista de professores(as), que restringe os posts ao(à) autor(a) selecionado(a);
-- um **campo de busca** por palavra-chave, que filtra por título ou texto.
+- um **campo de busca** por palavra-chave, que filtra por título, texto ou nome do(a) professor(a).
+
+Os posts aparecem do mais recente para o mais antigo.
 
 Ao clicar em um post, o(a) usuário(a) é levado(a) à página de detalhe.
 
@@ -359,7 +378,7 @@ Lista todos(as) os(as) professores(as) cadastrados(as) e oferece um botão que a
 
 ### Área do(a) professor(a) (`/area-professor`) — requer papel `AUTHOR`
 
-Um botão abre um modal de criação de post (título e conteúdo). Abaixo, a lista dos posts do próprio professor(a) logado(a) — nunca de outros(as) —, cada um com botões para editar (modal pré-preenchido) ou excluir (com confirmação).
+Um botão abre um modal de criação de post (título, conteúdo e matéria, com "Geral" pré-selecionado). O modal de edição também permite trocar a matéria, abrindo com a matéria atual do post. Abaixo, a lista dos posts do próprio professor(a) logado(a) — nunca de outros(as) —, cada um com botões para editar (modal pré-preenchido) ou excluir (com confirmação).
 
 > Não existe hoje uma tela própria para o papel `STUDENT`: um(a) estudante autenticado(a) enxerga o mesmo cabeçalho/menu de usuário logado, mas navega pela aplicação como um visitante — só as páginas públicas.
 
@@ -371,8 +390,20 @@ Além de consumida pelo próprio front-end (via Server Actions e serviços clien
 
 | Método | Rota | Auth | Corpo da requisição | Resposta |
 | --- | --- | --- | --- | --- |
-| `POST` | `/api/auth/login` | Pública | `{ "email": string, "password": string }` | `200` — `{ message }` (define o cookie `session`) · `400` erros de validação · `401` credenciais inválidas |
+| `POST` | `/api/auth/login` | Pública | `{ "email": string, "password": string }` | `200` — `{ message, token, tokenType: "Bearer", expiresAt, user: { id, name, role, authorId } }` (também define o cookie `session`) · `400` erros de validação · `401` credenciais inválidas |
 | `POST` | `/api/auth/logout` | Pública | — | `200` — `{ message }` (remove o cookie `session`) |
+
+**Autenticando fora do front-end (Postman, curl, mobile):** faça o login, pegue o `token` da resposta e envie-o no header `Authorization` das rotas protegidas:
+
+```bash
+# 1. Login: a resposta traz o JWT em "token"
+curl -X POST http://localhost:3000/api/auth/login   -H "Content-Type: application/json"   -d '{"email":"admin@techchallenge.com","password":"admin123"}'
+
+# 2. Rota protegida com Bearer token
+curl -X POST http://localhost:3000/api/author   -H "Authorization: Bearer <token>"   -H "Content-Type: application/json"   -d '{"name":"Prof. Ana","email":"ana@escola.com","password":"senha12345"}'
+```
+
+Uma coleção pronta do Postman, já configurada com Bearer token e com todos os endpoints, está em [`postman/TechChallenge3.postman_collection.json`](postman/TechChallenge3.postman_collection.json) (Postman › *Import*).
 
 ### Autores — `/api/author`
 
@@ -388,11 +419,32 @@ Além de consumida pelo próprio front-end (via Server Actions e serviços clien
 
 | Método | Rota | Auth | Corpo / query | Resposta |
 | --- | --- | --- | --- | --- |
-| `GET` | `/api/post` | Pública | Query params opcionais e combináveis: `q` (busca em `title`/`text`, case-insensitive) e `authorId` (filtra por autor) | `200` — array de `Post` (cada um já com `authors` embutido) |
-| `POST` | `/api/post` | **AUTHOR** (usuário logado com perfil de `Author`) | `{ "title": string, "text": string }` — o `authorId` é sempre resolvido a partir da sessão, nunca aceito no corpo | `201` — `{ data, message }` · `400` validação · `401` sem sessão · `403` sem perfil de autor |
-| `GET` | `/api/post/:id` | Pública | — | `200` — `Post` · `404` se não encontrado |
-| `PUT` | `/api/post/:id` | **ADMIN ou o(a) autor(a) dono(a) do post** | `{ "title": string, "text": string }` | `200` — `{ data, message }` · `400`/`403`/`404` |
+| `GET` | `/api/post` | Pública | Query params opcionais e combináveis (E): `q` (busca em `title`, `text` **e no nome do(a) autor(a)**, case-insensitive) e `authorId` (filtra por autor) | `200` — array de `Post`, **do mais recente para o mais antigo** (`createdAt` desc), cada um com `category` e `authors` embutido |
+| `POST` | `/api/post` | **AUTHOR** (usuário logado com perfil de `Author`) | `{ "title": string, "text": string, "category"?: Category }` — o `authorId` é sempre resolvido a partir da sessão, nunca aceito no corpo | `201` — `{ data, message }` · `400` validação (categoria inválida: `{ "errors": { "category": [...] } }`) · `401` sem sessão · `403` sem perfil de autor |
+| `GET` | `/api/post/:id` | Pública | — | `200` — `Post` (com `category`) · `404` se não encontrado |
+| `PUT` | `/api/post/:id` | **ADMIN ou o(a) autor(a) dono(a) do post** | `{ "title": string, "text": string, "category"?: Category }` | `200` — `{ data, message }` · `400` (categoria inválida: `{ "error": "Categoria inválida." }`) · `403`/`404` |
 | `DELETE` | `/api/post/:id` | **ADMIN ou o(a) autor(a) dono(a) do post** | — | `200` — `{ message }` · `403`/`404` |
+
+**Matéria do post (`category`)** — enum `Category`, aceito exatamente com estes valores:
+
+| Valor | Rótulo |
+| --- | --- |
+| `MATEMATICA` | Matemática |
+| `PORTUGUES` | Português |
+| `CIENCIAS` | Ciências |
+| `HISTORIA` | História |
+| `GEOGRAFIA` | Geografia |
+| `INGLES` | Inglês |
+| `ARTES` | Artes |
+| `EDUCACAO_FISICA` | Educação Física |
+| `GERAL` | Geral |
+
+- **Criação (`POST`)**: `category` é opcional; se vier ausente, o post é criado como `GERAL`.
+- **Edição (`PUT`)**: `category` é opcional; se vier ausente, a categoria atual do post é mantida.
+- Qualquer valor fora da lista retorna `400`.
+- **Posts antigos**: posts criados antes de o campo existir não têm `category` gravado no MongoDB. O Prisma devolve `GERAL` na leitura, mas filtros por categoria não os encontram. Rode uma vez `npm run db:backfill-category` (idempotente) para gravar `GERAL` neles.
+
+**Exemplo — busca pelo nome do autor** (`GET /api/post?q=silva`): devolve os posts cujo título ou texto contém "silva" **e** os posts de qualquer autor(a) com "silva" no nome.
 
 **Exemplo — login**
 
@@ -404,11 +456,29 @@ curl -i -X POST http://localhost:3000/api/auth/login \
 
 ```json
 {
-  "message": "Login realizado com sucesso!"
+  "message": "Login realizado com sucesso!",
+  "token": "eyJhbGciOiJIUzI1NiJ9...",
+  "tokenType": "Bearer",
+  "expiresAt": "2026-11-09T12:00:00.000Z",
+  "user": {
+    "id": "6650f1c2a1b2c3d4e5f60718",
+    "name": "Ana Silva",
+    "role": "AUTHOR",
+    "authorId": "6650f1c2a1b2c3d4e5f60719"
+  }
 }
 ```
 
-A resposta inclui um header `Set-Cookie: session=...` — reenvie esse cookie nas próximas requisições (por exemplo, `curl -b cookies.txt -c cookies.txt ...`) para acessar rotas autenticadas, como `POST /api/post`.
+O objeto `user` identifica quem está logado e traz só estes quatro campos (nunca `hash` nem `email`):
+
+| Campo | Descrição |
+| --- | --- |
+| `id` | id do `User` |
+| `name` | nome do usuário (ex.: para exibir as iniciais) |
+| `role` | `ADMIN`, `AUTHOR` ou `STUDENT` (ex.: mostrar ou esconder o botão de criar post) |
+| `authorId` | id do registro `Author` ligado ao usuário (compare com `post.authorId` para saber se o post é dele e liberar editar/excluir), ou `null` quando o usuário não tem perfil de professor(a) (alunos e admin sem perfil de autor) |
+
+A resposta também inclui um header `Set-Cookie: session=...` — reenvie esse cookie nas próximas requisições (por exemplo, `curl -b cookies.txt -c cookies.txt ...`) ou use o `token` no header `Authorization: Bearer <token>` para acessar rotas autenticadas, como `POST /api/post`.
 
 ## Roadmap / Melhorias futuras
 

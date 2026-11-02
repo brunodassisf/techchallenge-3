@@ -20,6 +20,20 @@ enum Role {
   STUDENT
 }
 
+// Matéria do post. O app mobile mapeia cada valor para um rótulo e uma cor,
+// então os nomes precisam ser estáveis.
+enum Category {
+  MATEMATICA
+  PORTUGUES
+  CIENCIAS
+  HISTORIA
+  GEOGRAFIA
+  INGLES
+  ARTES
+  EDUCACAO_FISICA
+  GERAL
+}
+
 model User {
   id        String   @id @default(auto()) @map("_id") @db.ObjectId
   name      String
@@ -58,6 +72,7 @@ model Post {
   text      String
   authors   Author   @relation(fields: [authorId], references: [id])
   authorId  String   @db.ObjectId
+  category  Category @default(GERAL)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }

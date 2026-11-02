@@ -37,6 +37,11 @@ export async function decrypt<T extends SessionPayload>(
     }
 }
 
+/**
+ * Assina o JWT, grava no cookie `session` (usado pelo front-end Next) e
+ * também devolve o token, para que clientes externos (Postman, apps mobile,
+ * outros serviços) possam enviá-lo no header `Authorization: Bearer <token>`.
+ */
 export async function createSession(userId: string, role: SessionPayload['role']) {
     const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
     const session = await encrypt({ userId, role, expiresAt })
@@ -49,6 +54,8 @@ export async function createSession(userId: string, role: SessionPayload['role']
         sameSite: 'lax',
         path: '/',
     })
+
+    return { token: session, expiresAt }
 }
 
 export async function updateSession() {

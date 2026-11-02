@@ -5,6 +5,7 @@ import { toaster } from "@/components/ui/toaster"
 import { Button, Dialog, Field, Flex, Input, Portal, Stack, Textarea } from "@chakra-ui/react"
 import { useQueryClient } from "@tanstack/react-query"
 import { useActionState, useEffect, useState } from "react"
+import CategorySelect from "./CategorySelect"
 
 const ModalCreatePost: React.FC<{ authorId?: string | null }> = ({ authorId }) => {
     const queryClient = useQueryClient()
@@ -17,6 +18,7 @@ const ModalCreatePost: React.FC<{ authorId?: string | null }> = ({ authorId }) =
             body: JSON.stringify({
                 title: formData.get("title"),
                 text: formData.get("text"),
+                category: formData.get("category") || undefined,
             }),
         })
         const body = await res.json()
@@ -83,6 +85,7 @@ const ModalCreatePost: React.FC<{ authorId?: string | null }> = ({ authorId }) =
                                             rows={6}
                                         />
                                     </Field.Root>
+                                    <CategorySelect name="category" defaultValue="GERAL" />
                                 </Stack>
                             </Dialog.Body>
                             <Dialog.Footer>

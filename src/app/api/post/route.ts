@@ -5,8 +5,10 @@ import { Prisma } from "../../../../generated/prisma/client";
 import { NextRequest, NextResponse } from "next/server";
 
 /**
+ * Posts ordenados do mais recente para o mais antigo (createdAt desc).
+ *
  * GET /api/post                          -> todos os posts
- * GET /api/post?q=termo                  -> só os posts cujo título ou texto contém "termo" (case-insensitive)
+ * GET /api/post?q=termo                  -> só os posts cujo título, texto ou nome do autor contém "termo" (case-insensitive)
  * GET /api/post?authorId=123             -> só os posts desse autor
  * GET /api/post?authorId=123&q=termo     -> os dois filtros combinados (E, não OU)
  */
@@ -22,12 +24,14 @@ export async function GET(request: NextRequest) {
     where.OR = [
       { title: { contains: q, mode: "insensitive" } },
       { text: { contains: q, mode: "insensitive" } },
+      { authors: { is: { name: { contains: q, mode: "insensitive" } } } },
     ];
   }
 
   const posts = await db.post.findMany({
     where,
     include: { authors: true },
+    orderBy: { createdAt: "desc" },
   });
 
   return NextResponse.json(posts);
@@ -60,10 +64,11 @@ export async function POST(request: Request) {
     );
   }
 
-  const { title, text } = validatedFields.data;
+  const { title, text, category } = validatedFields.data;
 
+  // category ausente -> o @default(GERAL) do schema é aplicado.
   const post = await db.post.create({
-    data: { title, text, authorId: author.id },
+    data: { title, text, category, authorId: author.id },
   });
 
   return NextResponse.json(

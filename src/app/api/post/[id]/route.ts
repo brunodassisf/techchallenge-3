@@ -1,6 +1,6 @@
 import { db } from "@/lib/prisma";
 import { getSession } from "@/lib/dal";
-import { Role } from "../../../../../generated/prisma/client";
+import { Category, Role } from "../../../../../generated/prisma/client";
 import { NextResponse } from "next/server";
 
 export async function GET(
@@ -34,7 +34,7 @@ export async function PUT(
 ) {
   const { id } = await params;
   const body = await request.json();
-  const { title, text } = body;
+  const { title, text, category } = body;
 
   if (
     !title ||
@@ -48,6 +48,14 @@ export async function PUT(
       { error: "Os campos 'title' e 'text' são obrigatórios." },
       { status: 400 }
     );
+  }
+
+  // category é opcional: ausente mantém a categoria atual do post.
+  if (
+    category !== undefined &&
+    !Object.values(Category).includes(category as Category)
+  ) {
+    return NextResponse.json({ error: "Categoria inválida." }, { status: 400 });
   }
 
   const existing = await db.post.findUnique({ where: { id } });
@@ -64,7 +72,7 @@ export async function PUT(
 
   const post = await db.post.update({
     where: { id },
-    data: { title: title.trim(), text: text.trim() },
+    data: { title: title.trim(), text: text.trim(), category },
   });
 
   return NextResponse.json({ data: post, message: "Post atualizado com sucesso!" });

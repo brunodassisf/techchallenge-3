@@ -1,5 +1,5 @@
 import * as z from 'zod'
-import { Role } from '../../generated/prisma/client'
+import { Category, Role } from '../../generated/prisma/client'
 
 export type FormState =
     | {
@@ -10,6 +10,7 @@ export type FormState =
             confirmPassword?: string[]
             title?: string[]
             text?: string[]
+            category?: string[]
         }
         ok?: boolean
         message?: string
@@ -36,4 +37,5 @@ export const CreateAuthorFormSchema = z.object({
 export const CreatePostFormSchema = z.object({
     title: z.string().min(1, 'Informe o título.').trim(),
     text: z.string().min(1, 'Informe o conteúdo do post.').trim(),
+    category: z.enum(Category, 'Categoria inválida.').optional(),
 });
