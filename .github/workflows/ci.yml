@@ -57,6 +57,9 @@ jobs:
     name: Docker build + smoke test
     runs-on: ubuntu-latest
     needs: quality
+    env:
+      # O Compose exige esta variável. Valor descartável, só para o smoke test.
+      DEFAULT_TEACHER_PASSWORD: ci-somente-smoke-test
     steps:
       - name: Checkout
         uses: actions/checkout@v5

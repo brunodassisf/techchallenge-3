@@ -90,6 +90,7 @@ src/
 │   ├── api/                       # API REST (Route Handlers)
 │   │   ├── auth/
 │   │   │   ├── login/route.ts     # POST — autentica e cria a sessão
+│   │   │   ├── first-access/route.ts # POST — troca a senha padrão e entra
 │   │   │   └── logout/route.ts    # POST — encerra a sessão
 │   │   ├── author/
 │   │   │   ├── route.ts           # GET (lista, pública) · POST (cria, ADMIN)
@@ -148,13 +149,15 @@ A aplicação usa autenticação própria (sem provedor externo), baseada em ses
   - **Header `Authorization: Bearer <token>`** — para clientes fora da aplicação Next: Postman, apps mobile, outros serviços.
 - `src/lib/dal.ts` expõe duas formas de ler a sessão atual:
   - `verifySession()` — decodifica o JWT (do header `Authorization` ou do cookie) e devolve só o payload assinado (`userId`, `role`, `expiresAt`), sem consultar o banco.
-  - `getSession()` — decodifica o JWT (header ou cookie) e busca o registro `User` completo no banco (usado por toda a API e pelas páginas que precisam do usuário logado).
+  - `getSession()` — decodifica o JWT (header ou cookie) e busca o registro `User` completo no banco (usado por toda a API e pelas páginas que precisam do usuário logado). Se a conta estiver **desativada** (`User.deactivatedAt` preenchido), devolve `null`: tokens e cookies já emitidos deixam de valer na hora, as rotas protegidas respondem `401` e o site trata a pessoa como deslogada.
+- **Primeiro acesso:** o professor cadastrado pelo ADMIN nasce com a senha padrão (`DEFAULT_TEACHER_PASSWORD`) e `User.firstAccess: true`. Enquanto isso, o login responde `403` com `code: "FIRST_ACCESS_REQUIRED"` e **não** cria sessão, então a conta com senha padrão não acessa nenhuma rota protegida. O professor define a própria senha em `POST /api/auth/first-access`, que já devolve a mesma resposta do login. Contas antigas, sem o campo, entram normalmente. O site não tem tela de primeiro acesso: ele só mostra a mensagem, e a senha é definida pelo app.
+- **Conta desativada:** o ADMIN pode desativar/reativar professores (`PATCH /api/author/:id/status`). O login de uma conta desativada responde `403` `{ "error": "Conta desativada. Fale com a coordenação." }` e não cria sessão. Essa checagem acontece só depois de conferir a senha, para não revelar se o e-mail existe. Os posts do professor desativado continuam publicados com o nome dele.
 
 ### Papéis (`Role`)
 
 | Papel | Pode acessar | Observações |
 | --- | --- | --- |
-| `ADMIN` | `/admin`, e qualquer post via API (edição/exclusão) | Único papel que pode cadastrar/editar/remover professores(as) |
+| `ADMIN` | `/admin`, e qualquer post via API (edição/exclusão) | Único papel que pode cadastrar/editar/desativar/remover professores(as) |
 | `AUTHOR` (professor(a)) | `/area-professor` | Só gerencia (edita/exclui) os próprios posts |
 | `STUDENT` (estudante) | Apenas as páginas públicas | Papel previsto no modelo de dados, mas hoje sem dashboard ou cadastro próprios — funciona como um visitante autenticado |
 
@@ -181,6 +184,8 @@ model User {
   hash      String
   role      Role
   origemId  String?  @db.ObjectId
+  deactivatedAt DateTime? // preenchido = conta desativada pelo ADMIN
+  firstAccess Boolean?    // true = ainda precisa criar a própria senha
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   authors   Author?
@@ -284,6 +289,7 @@ Crie um arquivo `.env` na raiz do projeto com as variáveis abaixo (sem elas a a
 | `ADMIN_EMAIL` | E-mail do usuário administrador criado pelo script de seed |
 | `ADMIN_PASSWORD` | Senha (em texto puro) do usuário administrador — é hasheada no momento do seed |
 | `ADMIN_NAME` | Nome de exibição do usuário administrador |
+| `DEFAULT_TEACHER_PASSWORD` | Senha padrão dos professores recém-cadastrados (mínimo de 8 caracteres), trocada por eles no primeiro acesso. Sem ela, `POST /api/author` responde `500`, e o `docker compose` não sobe (o Compose exige a variável) |
 
 ```bash
 # 3. Subir apenas os containers do MongoDB (via Docker Compose)
@@ -305,7 +311,7 @@ npm run dev
 
 Esse comando baixa as imagens `mongo:7` e `mongo-express:1` (caso ainda não existam localmente) e sobe três containers: o MongoDB (`techchallenge3-mongodb`, já configurado como replica set de nó único, requisito do Prisma para transações), um container auxiliar que inicializa esse replica set (`techchallenge3-mongodb-init`) e o [Mongo Express](https://github.com/mongo-express/mongo-express) (`techchallenge3-mongo-express`, interface web em [http://localhost:8082](http://localhost:8082) para inspecionar o banco). Se estiver usando essa infraestrutura local, aponte `DATABASE_URL` para `mongodb://localhost:27018/techchallenge3?replicaSet=rs0`. Caso já tenha uma instância própria do MongoDB (local ou Atlas), pule este passo e aponte `DATABASE_URL` diretamente para ela.
 
-A aplicação fica disponível em [http://localhost:3000](http://localhost:3000). Faça login com o e-mail/senha definidos em `ADMIN_EMAIL`/`ADMIN_PASSWORD` para acessar `/admin` e cadastrar professores(as) — cada professor(a) cadastrado(a) pode então fazer login e acessar `/area-professor` para publicar posts.
+A aplicação fica disponível em [http://localhost:3000](http://localhost:3000). Faça login com o e-mail/senha definidos em `ADMIN_EMAIL`/`ADMIN_PASSWORD` para acessar `/admin` e cadastrar professores(as). Cada professor(a) cadastrado(a) define a própria senha no primeiro acesso (pelo app ou por `POST /api/auth/first-access`) e então pode fazer login e acessar `/area-professor` para publicar posts.
 
 **Outros scripts disponíveis**
 
@@ -341,7 +347,7 @@ O `docker-compose.yml` orquestra os serviços nesta ordem:
 
 O `Dockerfile` é *multi-stage*: um estágio instala as dependências (`npm ci`), outro gera o Prisma Client e roda o `next build` com `output: "standalone"`, e o estágio final (`runner`) leva só o servidor mínimo gerado pelo Next, sem devDependencies, executando como usuário não-root. O serviço `migrate` reaproveita o estágio de build, que já contém o Prisma CLI.
 
-**Variáveis de ambiente no Docker:** o Compose já define `DATABASE_URL` apontando para o container do MongoDB. `SESSION_SECRET`, `ADMIN_EMAIL`, `ADMIN_PASSWORD` e `ADMIN_NAME` são lidos do `.env` da raiz, se existir; caso contrário são usados valores padrão de desenvolvimento (admin `admin@techchallenge.com` / `admin123`). Duas variáveis extras existem para rodar em produção sem HTTPS:
+**Variáveis de ambiente no Docker:** o Compose já define `DATABASE_URL` apontando para o container do MongoDB. `SESSION_SECRET`, `ADMIN_EMAIL`, `ADMIN_PASSWORD` e `ADMIN_NAME` são lidos do `.env` da raiz, se existir; caso contrário são usados valores padrão de desenvolvimento (admin `admin@techchallenge.com` / `admin123`). `DEFAULT_TEACHER_PASSWORD` **não tem valor padrão**: defina-a no `.env`, ou qualquer comando `docker compose` falha com "Defina DEFAULT_TEACHER_PASSWORD no .env". No CI, o workflow define um valor descartável. Duas variáveis extras existem para rodar em produção sem HTTPS:
 
 | Variável | Descrição |
 | --- | --- |
@@ -374,7 +380,7 @@ Exibe o título, o conteúdo completo e o nome do(a) professor(a) responsável p
 
 ### Área administrativa (`/admin`) — requer papel `ADMIN`
 
-Lista todos(as) os(as) professores(as) cadastrados(as) e oferece um botão que abre um modal de cadastro de novo(a) professor(a) (nome, e-mail e senha). O cadastro cria, em uma única ação, a conta de acesso (`User` com papel `AUTHOR`) e o perfil de autor (`Author`) vinculado a ela.
+Lista todos(as) os(as) professores(as) cadastrados(as) e oferece um botão que abre um modal de cadastro de novo(a) professor(a) (nome e e-mail; a conta nasce com a senha padrão). O cadastro cria, em uma única ação, a conta de acesso (`User` com papel `AUTHOR`) e o perfil de autor (`Author`) vinculado a ela.
 
 ### Área do(a) professor(a) (`/area-professor`) — requer papel `AUTHOR`
 
@@ -390,8 +396,30 @@ Além de consumida pelo próprio front-end (via Server Actions e serviços clien
 
 | Método | Rota | Auth | Corpo da requisição | Resposta |
 | --- | --- | --- | --- | --- |
-| `POST` | `/api/auth/login` | Pública | `{ "email": string, "password": string }` | `200` — `{ message, token, tokenType: "Bearer", expiresAt, user: { id, name, role, authorId } }` (também define o cookie `session`) · `400` erros de validação · `401` credenciais inválidas |
+| `POST` | `/api/auth/login` | Pública | `{ "email": string, "password": string }` | `200` — `{ message, token, tokenType: "Bearer", expiresAt, user: { id, name, role, authorId } }` (também define o cookie `session`) · `400` erros de validação · `401` credenciais inválidas · `403` conta desativada ou primeiro acesso pendente (não cria sessão; veja abaixo) |
+| `POST` | `/api/auth/first-access` | Pública | `{ "email": string, "currentPassword": string, "password": string (mín. 8), "confirmPassword": string }` | `200` — mesmo formato do login (também define o cookie `session`) · `400` validação · `401` credenciais inválidas · `403` conta desativada · `409` senha já definida |
 | `POST` | `/api/auth/logout` | Pública | — | `200` — `{ message }` (remove o cookie `session`) |
+
+**Respostas `403` do login:**
+
+```json
+{ "error": "Conta desativada. Fale com a coordenação." }
+```
+
+```json
+{ "error": "Primeiro acesso: defina sua senha no app.", "code": "FIRST_ACCESS_REQUIRED" }
+```
+
+**Primeiro acesso** (`POST /api/auth/first-access`): ao receber `code: "FIRST_ACCESS_REQUIRED"`, o cliente pede a nova senha e chama esta rota, informando a senha padrão em `currentPassword`. As checagens seguem esta ordem:
+
+| # | Situação | Resposta |
+| --- | --- | --- |
+| 1 | Corpo inválido (senhas diferentes: `confirmPassword`, "As senhas não coincidem."; menos de 8 caracteres: `password`) | `400` `{ "errors": { ... } }` |
+| 2 | Usuário inexistente ou `currentPassword` errada | `401` `{ "error": "E-mail ou senha inválidos." }` |
+| 3 | Conta desativada | `403` `{ "error": "Conta desativada. Fale com a coordenação." }` |
+| 4 | `firstAccess` diferente de `true` | `409` `{ "error": "A senha já foi definida. Entre com sua senha." }` |
+| 5 | Nova senha igual à atual | `400` `{ "errors": { "password": ["Escolha uma senha diferente da senha padrão."] } }` |
+| 6 | Tudo certo | `200` com a resposta do login: grava o novo hash e `firstAccess: false`, e o app já entra sem novo login |
 
 **Autenticando fora do front-end (Postman, curl, mobile):** faça o login, pegue o `token` da resposta e envie-o no header `Authorization` das rotas protegidas:
 
@@ -400,7 +428,7 @@ Além de consumida pelo próprio front-end (via Server Actions e serviços clien
 curl -X POST http://localhost:3000/api/auth/login   -H "Content-Type: application/json"   -d '{"email":"admin@techchallenge.com","password":"admin123"}'
 
 # 2. Rota protegida com Bearer token
-curl -X POST http://localhost:3000/api/author   -H "Authorization: Bearer <token>"   -H "Content-Type: application/json"   -d '{"name":"Prof. Ana","email":"ana@escola.com","password":"senha12345"}'
+curl -X POST http://localhost:3000/api/author   -H "Authorization: Bearer <token>"   -H "Content-Type: application/json"   -d '{"name":"Prof. Ana","email":"ana@escola.com"}'
 ```
 
 Uma coleção pronta do Postman, já configurada com Bearer token e com todos os endpoints, está em [`postman/TechChallenge3.postman_collection.json`](postman/TechChallenge3.postman_collection.json) (Postman › *Import*).
@@ -409,11 +437,55 @@ Uma coleção pronta do Postman, já configurada com Bearer token e com todos os
 
 | Método | Rota | Auth | Corpo da requisição | Resposta |
 | --- | --- | --- | --- | --- |
-| `GET` | `/api/author` | Pública | — | `200` — array de `Author` |
-| `POST` | `/api/author` | **ADMIN** | `{ "name": string, "email": string, "password": string (mín. 8) }` | `201` — `{ data, message }` · `400` validação · `403` sem permissão · `409` e-mail já cadastrado |
-| `GET` | `/api/author/:id` | Pública | — | `200` — `Author` · `404` se não encontrado |
-| `PUT` | `/api/author/:id` | **ADMIN** | `{ "name": string }` | `200` — `{ data, message }` · `400`/`403`/`404` |
-| `DELETE` | `/api/author/:id` | **ADMIN** | — | `200` — `{ message }` · `403`/`404` |
+| `GET` | `/api/author` | Pública | — | `200` — array de `Author` **ordenado por nome**, cada item com `postCount` (quantidade de posts do professor) e `active` (conta ativa ou desativada) |
+| `POST` | `/api/author` | **ADMIN** | `{ "name": string, "email": string }` — a conta nasce com a senha padrão e `firstAccess: true`; um `password` enviado é ignorado | `201` — `{ data, message }` · `400` validação · `401` sem sessão · `403` não é admin · `409` e-mail já cadastrado · `500` `{ "error": "Senha padrão não configurada no servidor." }` (`DEFAULT_TEACHER_PASSWORD` ausente ou com menos de 8 caracteres; nada é criado) |
+| `GET` | `/api/author/:id` | Pública | — | `200` — `Author` no mesmo formato da listagem (com `postCount` e `active`) · `404` se não encontrado ou id inválido |
+| `PUT` | `/api/author/:id` | **ADMIN** | `{ "name": string }` | `200` — `{ data, message }` · `400` · `401` sem sessão · `403` não é admin · `404` |
+| `DELETE` | `/api/author/:id` | **ADMIN** | — | `200` — `{ "message": "Professor removido com sucesso!" }` · `401` sem sessão · `403` não é admin · `404` · `409` professor com posts |
+| `PATCH` | `/api/author/:id/status` | **ADMIN** | `{ "active": boolean }` | `200` — `{ data, message }` (`"Professor desativado."` / `"Professor reativado."`) · `400` corpo inválido · `401` sem sessão · `403` não é admin · `404` não encontrado ou id inválido · `409` professor sem conta de login |
+
+**Listagem** (`GET /api/author`):
+
+```json
+[
+  { "id": "6650f1c2a1b2c3d4e5f60719", "name": "Ana Silva", "userId": "6650f1c2a1b2c3d4e5f60718", "createdAt": "...", "updatedAt": "...", "postCount": 3, "active": true }
+]
+```
+
+`active` é `false` quando a conta de login do professor está desativada, e `true` para professores sem conta de login (`userId` vazio). Os dados da conta (`user`, e-mail, hash) nunca são devolvidos.
+
+**Desativar / reativar professor** (`PATCH /api/author/:id/status`):
+
+- `{ "active": false }` grava `User.deactivatedAt` com a data atual; `{ "active": true }` limpa o campo. Qualquer outro corpo responde `400` `{ "error": "Envie { active: true } ou { active: false }." }`.
+- O professor desativado não consegue mais entrar: o login responde `403` e tokens e cookies já emitidos passam a dar `401`. **Os posts dele continuam publicados**, com o nome dele.
+- Repetir a mesma ação (desativar quem já está desativado) não é erro: responde `200`. A data da primeira desativação é mantida.
+- Professor sem conta de login (`userId` vazio) responde `409` `{ "error": "Este professor não tem conta de login para desativar." }`.
+- `403` sem ser ADMIN: `{ "error": "Apenas administradores podem desativar professores." }`.
+- Resposta `200`, com `data` no mesmo formato de um item da listagem:
+  ```json
+  {
+    "data": { "id": "6650f1c2a1b2c3d4e5f60719", "name": "Ana Silva", "userId": "6650f1c2a1b2c3d4e5f60718", "createdAt": "...", "updatedAt": "...", "postCount": 3, "active": false },
+    "message": "Professor desativado."
+  }
+  ```
+
+> No MongoDB, documentos antigos não têm o campo `deactivatedAt`, e um filtro `where: { deactivatedAt: null }` não os encontra. Por isso o status é sempre lido em JavaScript (`!user.deactivatedAt`), nunca filtrado no banco.
+
+**Remoção de professor** (`DELETE /api/author/:id`):
+
+- Se o professor tem posts, a remoção é bloqueada com `409`, porque todo post exige um autor. Para tirar o acesso dele mantendo os posts, desative-o:
+  ```json
+  { "error": "Este professor tem 3 posts. Desative o professor para manter os posts publicados.", "postCount": 3 }
+  ```
+  A mensagem usa "1 post" no singular.
+- Sem posts, o perfil `Author` **e** a conta de login (`User`) ligada a ele são apagados juntos, numa única transação. Depois disso, o login com o e-mail dele responde `401`.
+
+**`401` x `403` nas rotas protegidas** (`/api/author` e `/api/author/:id` de escrita, `PUT`/`DELETE /api/post/:id`):
+
+- `401` `{ "error": "Você precisa estar logado." }`: não há sessão. Falta o header `Authorization`/cookie, o token é inválido ou expirou, ou a conta foi desativada. O cliente deve mandar a pessoa para o login.
+- `403`: há sessão, mas sem permissão (ex.: professor tentando remover outro professor ou editar o post de outra pessoa).
+
+**Id inválido:** nas rotas `/api/author/:id` e `/api/post/:id`, um id que não é ObjectId (24 caracteres hexadecimais) responde `404` em JSON, com a mesma mensagem de "não encontrado" (`Autor não encontrado.` / `Post não encontrado.`).
 
 ### Posts — `/api/post`
 
@@ -421,9 +493,9 @@ Uma coleção pronta do Postman, já configurada com Bearer token e com todos os
 | --- | --- | --- | --- | --- |
 | `GET` | `/api/post` | Pública | Query params opcionais e combináveis (E): `q` (busca em `title`, `text` **e no nome do(a) autor(a)**, case-insensitive) e `authorId` (filtra por autor) | `200` — array de `Post`, **do mais recente para o mais antigo** (`createdAt` desc), cada um com `category` e `authors` embutido |
 | `POST` | `/api/post` | **AUTHOR** (usuário logado com perfil de `Author`) | `{ "title": string, "text": string, "category"?: Category }` — o `authorId` é sempre resolvido a partir da sessão, nunca aceito no corpo | `201` — `{ data, message }` · `400` validação (categoria inválida: `{ "errors": { "category": [...] } }`) · `401` sem sessão · `403` sem perfil de autor |
-| `GET` | `/api/post/:id` | Pública | — | `200` — `Post` (com `category`) · `404` se não encontrado |
-| `PUT` | `/api/post/:id` | **ADMIN ou o(a) autor(a) dono(a) do post** | `{ "title": string, "text": string, "category"?: Category }` | `200` — `{ data, message }` · `400` (categoria inválida: `{ "error": "Categoria inválida." }`) · `403`/`404` |
-| `DELETE` | `/api/post/:id` | **ADMIN ou o(a) autor(a) dono(a) do post** | — | `200` — `{ message }` · `403`/`404` |
+| `GET` | `/api/post/:id` | Pública | — | `200` — `Post` (com `category`) · `404` se não encontrado ou id inválido |
+| `PUT` | `/api/post/:id` | **ADMIN ou o(a) autor(a) dono(a) do post** | `{ "title": string, "text": string, "category"?: Category }` | `200` — `{ data, message }` · `400` (categoria inválida: `{ "error": "Categoria inválida." }`) · `401` sem sessão · `403` não é o autor nem ADMIN · `404` |
+| `DELETE` | `/api/post/:id` | **ADMIN ou o(a) autor(a) dono(a) do post** | — | `200` — `{ message }` · `401` sem sessão · `403` não é o autor nem ADMIN · `404` |
 
 **Matéria do post (`category`)** — enum `Category`, aceito exatamente com estes valores:
 

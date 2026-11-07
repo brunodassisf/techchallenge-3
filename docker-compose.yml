@@ -77,6 +77,7 @@ services:
     environment:
       DATABASE_URL: mongodb://mongodb:27017/techchallenge3?replicaSet=rs0
       SESSION_SECRET: ${SESSION_SECRET:-troque-este-segredo-em-producao-por-uma-string-longa}
+      DEFAULT_TEACHER_PASSWORD: ${DEFAULT_TEACHER_PASSWORD:?Defina DEFAULT_TEACHER_PASSWORD no .env}
       # O servidor chama as próprias rotas /api por HTTP dentro do container.
       INTERNAL_API_URL: http://localhost:3000
       # Sem HTTPS local: permite que o navegador aceite o cookie de sessão.

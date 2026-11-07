@@ -41,6 +41,14 @@ model User {
   hash      String
   role      Role
   origemId  String?  @db.ObjectId
+  // Preenchido quando o ADMIN desativa a conta; ausente/null = conta ativa.
+  // No MongoDB, `where: { deactivatedAt: null }` não encontra documentos sem
+  // o campo: verifique em JavaScript (`!user.deactivatedAt`), não no filtro.
+  deactivatedAt DateTime?
+  // true = o professor ainda precisa criar a própria senha.
+  // Ausente/null/false = conta normal. Verifique em JavaScript
+  // (`user.firstAccess === true`), não no filtro do banco.
+  firstAccess Boolean?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   authors   Author?

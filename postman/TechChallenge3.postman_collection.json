@@ -1,7 +1,7 @@
 {
   "info": {
     "name": "TechChallenge3",
-    "description": "API REST do Blog Acadêmico (Tech Challenge 3: Next.js + Prisma + MongoDB).\n\n**Como usar**\n1. Suba a aplicação (`docker compose up -d --build` ou `npm run dev`).\n2. Ajuste as variáveis `adminEmail`/`adminPassword` (aba *Variables* da coleção) para as do seu `.env` (padrão do Docker sem `.env`: `admin@techchallenge.com` / `admin123`).\n3. Execute as pastas na ordem, ou a coleção inteira com **Run collection**.\n\n**Autenticação JWT (Bearer):** os logins salvam o `token` retornado na variável `{{token}}`, e a coleção envia `Authorization: Bearer {{token}}` em todas as requisições (aba *Authorization* da coleção). Para trocar de papel (admin ↔ professor) basta rodar o login correspondente. Os IDs (`authorId`, `postId`) são preenchidos pelos scripts das requisições de criação.",
+    "description": "API REST do Blog Acadêmico (Tech Challenge 3: Next.js + Prisma + MongoDB).\n\n**Como usar**\n1. Suba a aplicação (`docker compose up -d --build` ou `npm run dev`).\n2. Ajuste as variáveis `adminEmail`/`adminPassword` (aba *Variables* da coleção) para as do seu `.env` (padrão do Docker sem `ADMIN_*` no `.env`: `admin@techchallenge.com` / `admin123`). Preencha também `defaultTeacherPassword` com o valor de `DEFAULT_TEACHER_PASSWORD` do seu `.env`, de preferência só no *Current value*, para ele não ir parar em um arquivo exportado.\n3. Execute as pastas na ordem, ou a coleção inteira com **Run collection**.\n\n**Autenticação JWT (Bearer):** os logins salvam o `token` retornado na variável `{{token}}`, e a coleção envia `Authorization: Bearer {{token}}` em todas as requisições (aba *Authorization* da coleção). Para trocar de papel (admin ↔ professor) basta rodar o login correspondente. Os IDs (`authorId`, `postId`) são preenchidos pelos scripts das requisições de criação.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "auth": {
@@ -33,6 +33,10 @@
     },
     {
       "key": "authorEmail",
+      "value": ""
+    },
+    {
+      "key": "defaultTeacherPassword",
       "value": ""
     },
     {
@@ -74,7 +78,7 @@
                 "login"
               ]
             },
-            "description": "Autentica o usuário ADMIN criado pelo seed (`ADMIN_EMAIL`/`ADMIN_PASSWORD`). A resposta traz `token` (JWT), que o script salva em `{{token}}`; a coleção passa a enviá-lo como `Authorization: Bearer {{token}}` em todas as requisições.\n\nRespostas: `200` `{ message, token, tokenType, expiresAt, user: { id, name, role, authorId } }` · `400` validação · `401` e-mail ou senha inválidos.\n\n`user` traz só esses quatro campos (nunca `hash`/`email`). `authorId` é o id do `Author` ligado ao usuário, ou `null` para alunos e admin sem perfil de professor(a).",
+            "description": "Autentica o usuário ADMIN criado pelo seed (`ADMIN_EMAIL`/`ADMIN_PASSWORD`). A resposta traz `token` (JWT), que o script salva em `{{token}}`; a coleção passa a enviá-lo como `Authorization: Bearer {{token}}` em todas as requisições.\n\nRespostas: `200` `{ message, token, tokenType, expiresAt, user: { id, name, role, authorId } }` · `400` validação · `401` e-mail ou senha inválidos · `403` conta desativada pelo ADMIN (não cria sessão).\n\n`user` traz só esses quatro campos (nunca `hash`/`email`). `authorId` é o id do `Author` ligado ao usuário, ou `null` para alunos e admin sem perfil de professor(a).",
             "auth": {
               "type": "noauth"
             },
@@ -224,7 +228,7 @@
                 "author"
               ]
             },
-            "description": "Público. Retorna todos os autores."
+            "description": "Público (a home usa para o filtro por autor). Retorna os autores **ordenados por nome**, cada um com `postCount` (quantidade de posts do professor) e `active` (`false` = conta desativada). Nunca devolve o objeto `user` (e-mail/hash)."
           },
           "protocolProfileBehavior": {
             "disableCookies": true
@@ -236,9 +240,42 @@
                 "type": "text/javascript",
                 "exec": [
                   "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
-                  "pm.test(\"Retorna um array\", () => pm.expect(pm.response.json()).to.be.an(\"array\"));"
+                  "const authors = pm.response.json();",
+                  "pm.test(\"Retorna um array\", () => pm.expect(authors).to.be.an(\"array\"));",
+                  "pm.test(\"Cada item tem postCount (sem _count)\", () => authors.forEach(a => { pm.expect(a.postCount).to.be.a(\"number\"); pm.expect(a).to.not.have.property(\"_count\"); }));",
+                  "pm.test(\"Cada item tem active (sem user)\", () => authors.forEach(a => { pm.expect(a.active).to.be.a(\"boolean\"); pm.expect(a).to.not.have.property(\"user\"); }));",
+                  "pm.test(\"Ordenado por nome\", () => authors.forEach((a, i) => { if (i) pm.expect(authors[i - 1].name <= a.name).to.be.true; }));"
                 ]
               }
+            }
+          ],
+          "response": [
+            {
+              "name": "200 — lista com postCount e active",
+              "originalRequest": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/api/author",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "author"
+                  ]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "[\n  {\n    \"id\": \"6650f1c2a1b2c3d4e5f60719\",\n    \"name\": \"Ana Silva\",\n    \"userId\": \"6650f1c2a1b2c3d4e5f60718\",\n    \"createdAt\": \"2026-11-03T12:00:00.000Z\",\n    \"updatedAt\": \"2026-11-03T12:00:00.000Z\",\n    \"postCount\": 3,\n    \"active\": true\n  },\n  {\n    \"id\": \"6650f1c2a1b2c3d4e5f6071b\",\n    \"name\": \"Marcos Lima\",\n    \"userId\": \"6650f1c2a1b2c3d4e5f6071a\",\n    \"createdAt\": \"2026-11-03T12:05:00.000Z\",\n    \"updatedAt\": \"2026-11-03T12:05:00.000Z\",\n    \"postCount\": 0,\n    \"active\": false\n  }\n]"
             }
           ]
         },
@@ -262,10 +299,10 @@
                 "author"
               ]
             },
-            "description": "Requer token de **ADMIN**. Cria o usuário (papel `AUTHOR`) e o perfil de autor vinculado.\n\nO pre-request gera um e-mail único a cada execução e o teste salva `authorId` nas variáveis da coleção.\n\nRespostas: `201` criado · `400` validação (senha mín. 8 caracteres) · `403` não é admin · `409` e-mail já existe.",
+            "description": "Requer token de **ADMIN**. O corpo é só `name` e `email`: a conta nasce com a senha padrão do servidor (`DEFAULT_TEACHER_PASSWORD`) e `firstAccess: true`. Cria o usuário (papel `AUTHOR`) e o perfil de autor vinculado.\n\nO pre-request gera um e-mail único a cada execução e o teste salva `authorId` nas variáveis da coleção.\n\nRespostas: `201` criado · `400` validação (senha mín. 8 caracteres) · `403` não é admin · `409` e-mail já existe.",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"name\": \"Ana Silva\",\n  \"email\": \"{{authorEmail}}\",\n  \"password\": \"{{authorPassword}}\"\n}",
+              "raw": "{\n  \"name\": \"Ana Silva\",\n  \"email\": \"{{authorEmail}}\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -299,7 +336,7 @@
           ]
         },
         {
-          "name": "Cadastrar professor sem token (403)",
+          "name": "Cadastrar professor sem token (401)",
           "request": {
             "method": "POST",
             "header": [
@@ -318,13 +355,13 @@
                 "author"
               ]
             },
-            "description": "Exemplo sem o header `Authorization`: a API recusa com `403`.",
+            "description": "Exemplo sem o header `Authorization`: a API responde `401` (`Você precisa estar logado.`). Com token válido mas sem ser ADMIN, a resposta é `403`.",
             "auth": {
               "type": "noauth"
             },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"name\": \"Sem Token\",\n  \"email\": \"sem.token@techchallenge.com\",\n  \"password\": \"senha12345\"\n}",
+              "raw": "{\n  \"name\": \"Sem Token\",\n  \"email\": \"sem.token@techchallenge.com\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -341,7 +378,41 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "pm.test(\"Status 403\", () => pm.response.to.have.status(403));"
+                  "pm.test(\"Status 401\", () => pm.response.to.have.status(401));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Buscar professor com ID inválido (404)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/author/abc",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "author",
+                "abc"
+              ]
+            },
+            "description": "Um ID que não é ObjectId (24 caracteres hexadecimais) responde `404` em JSON."
+          },
+          "protocolProfileBehavior": {
+            "disableCookies": true
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 404\", () => pm.response.to.have.status(404));",
+                  "pm.test(\"Mensagem de não encontrado\", () => pm.expect(pm.response.json().error).to.eql(\"Autor não encontrado.\"));"
                 ]
               }
             }
@@ -401,7 +472,7 @@
                 "{{authorId}}"
               ]
             },
-            "description": "Requer token de **ADMIN**. Só o campo `name` é editável.\n\nRespostas: `200` · `400` · `403` · `404`.",
+            "description": "Requer token de **ADMIN**. Só o campo `name` é editável.\n\nRespostas: `200` · `400` · `401` sem token · `403` não é admin · `404`.",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"name\": \"Ana Silva Editada\"\n}",
@@ -431,8 +502,193 @@
     },
     {
       "name": "3. Auth (professor)",
-      "description": "Troca o token para o do(a) professor(a) recém-cadastrado(a).",
+      "description": "Primeiro acesso do(a) professor(a) recém-cadastrado(a): o login com a senha padrão dá 403, ele(a) define a própria senha e passa a entrar normalmente. Exige a variável `defaultTeacherPassword`.",
       "item": [
+        {
+          "name": "Login em primeiro acesso (403)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "login"
+              ]
+            },
+            "description": "Com a senha padrão (`{{defaultTeacherPassword}}`), o login do professor recém-cadastrado é recusado com `403` e `code: \"FIRST_ACCESS_REQUIRED\"`. Nenhuma sessão é criada.",
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{authorEmail}}\",\n  \"password\": \"{{defaultTeacherPassword}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "protocolProfileBehavior": {
+            "disableCookies": true
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 403\", () => pm.response.to.have.status(403));",
+                  "const body = pm.response.json();",
+                  "pm.test(\"Código FIRST_ACCESS_REQUIRED\", () => pm.expect(body.code).to.eql(\"FIRST_ACCESS_REQUIRED\"));",
+                  "pm.test(\"Sem token\", () => pm.expect(body).to.not.have.property(\"token\"));",
+                  "pm.test(\"Sem cookie session\", () => pm.expect(pm.response.headers.has(\"Set-Cookie\")).to.be.false);"
+                ]
+              }
+            }
+          ],
+          "response": [
+            {
+              "name": "403 — primeiro acesso",
+              "originalRequest": {
+                "method": "POST",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/api/auth/login",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "auth",
+                    "login"
+                  ]
+                }
+              },
+              "status": "Forbidden",
+              "code": 403,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"error\": \"Primeiro acesso: defina sua senha no app.\",\n  \"code\": \"FIRST_ACCESS_REQUIRED\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "Definir senha no primeiro acesso",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/first-access",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "first-access"
+              ]
+            },
+            "description": "Pública. Troca a senha padrão (`currentPassword`) pela senha do professor e devolve a **mesma resposta do login**, então o app já entra. O script salva o `token`.\n\nRespostas: `200` · `400` validação ou nova senha igual à atual · `401` e-mail ou senha inválidos · `403` conta desativada · `409` senha já definida.",
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{authorEmail}}\",\n  \"currentPassword\": \"{{defaultTeacherPassword}}\",\n  \"password\": \"{{authorPassword}}\",\n  \"confirmPassword\": \"{{authorPassword}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "protocolProfileBehavior": {
+            "disableCookies": true
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test(\"Token JWT retornado\", () => pm.expect(body.token).to.be.a(\"string\"));",
+                  "pm.test(\"Usuário logado retornado (sem hash/email)\", () => {",
+                  "  pm.expect(body.user).to.have.all.keys(\"id\", \"name\", \"role\", \"authorId\");",
+                  "});",
+                  "pm.collectionVariables.set(\"token\", body.token);",
+                  "pm.test(\"authorId do professor preenchido\", () => pm.expect(body.user.authorId).to.eql(pm.collectionVariables.get(\"authorId\")));"
+                ]
+              }
+            }
+          ],
+          "response": [
+            {
+              "name": "200 — senha definida",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/auth/first-access",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "auth",
+                    "first-access"
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"email\": \"{{authorEmail}}\",\n  \"currentPassword\": \"{{defaultTeacherPassword}}\",\n  \"password\": \"{{authorPassword}}\",\n  \"confirmPassword\": \"{{authorPassword}}\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"message\": \"Login realizado com sucesso!\",\n  \"token\": \"eyJhbGciOiJIUzI1NiJ9...\",\n  \"tokenType\": \"Bearer\",\n  \"expiresAt\": \"2026-11-09T12:00:00.000Z\",\n  \"user\": {\n    \"id\": \"6650f1c2a1b2c3d4e5f60718\",\n    \"name\": \"Ana Silva\",\n    \"role\": \"AUTHOR\",\n    \"authorId\": \"6650f1c2a1b2c3d4e5f60719\"\n  }\n}"
+            }
+          ]
+        },
         {
           "name": "Login (professor)",
           "request": {
@@ -454,7 +710,7 @@
                 "login"
               ]
             },
-            "description": "Autentica o(a) professor(a) cadastrado(a) em **2. Professores › Cadastrar professor** (usa `authorEmail`/`authorPassword`, preenchidas automaticamente) e troca o `{{token}}` pelo dele(a).\n\nRespostas: `200` `{ message, token, tokenType, expiresAt, user: { id, name, role, authorId } }` · `400` validação · `401` e-mail ou senha inválidos.\n\n`user` traz só esses quatro campos (nunca `hash`/`email`). `authorId` é o id do `Author` ligado ao usuário, ou `null` para alunos e admin sem perfil de professor(a).",
+            "description": "Autentica o(a) professor(a) cadastrado(a) em **2. Professores › Cadastrar professor** (usa `authorEmail`/`authorPassword`, preenchidas automaticamente) e troca o `{{token}}` pelo dele(a).\n\nRespostas: `200` `{ message, token, tokenType, expiresAt, user: { id, name, role, authorId } }` · `400` validação · `401` e-mail ou senha inválidos · `403` conta desativada pelo ADMIN (não cria sessão).\n\n`user` traz só esses quatro campos (nunca `hash`/`email`). `authorId` é o id do `Author` ligado ao usuário, ou `null` para alunos e admin sem perfil de professor(a).",
             "auth": {
               "type": "noauth"
             },
@@ -836,6 +1092,123 @@
           ]
         },
         {
+          "name": "Buscar post com ID inválido (404)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/post/abc",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "post",
+                "abc"
+              ]
+            },
+            "description": "Um ID que não é ObjectId (24 caracteres hexadecimais) responde `404` em JSON."
+          },
+          "protocolProfileBehavior": {
+            "disableCookies": true
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 404\", () => pm.response.to.have.status(404));",
+                  "pm.test(\"Mensagem de não encontrado\", () => pm.expect(pm.response.json().error).to.eql(\"Post não encontrado.\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Editar post sem token (401)",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/post/{{postId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "post",
+                "{{postId}}"
+              ]
+            },
+            "description": "Sem o header `Authorization` (ou com token inválido/expirado): `401`. Com token de outro professor: `403`.",
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Sem token\",\n  \"text\": \"Não deve ser salvo.\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "protocolProfileBehavior": {
+            "disableCookies": true
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 401\", () => pm.response.to.have.status(401));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Remover professor com token de professor (403)",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/author/{{authorId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "author",
+                "{{authorId}}"
+              ]
+            },
+            "description": "Token válido, mas de professor(a): a API responde `403` (só ADMIN remove professores)."
+          },
+          "protocolProfileBehavior": {
+            "disableCookies": true
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 403\", () => pm.response.to.have.status(403));"
+                ]
+              }
+            }
+          ]
+        },
+        {
           "name": "Criar post sem token (401)",
           "request": {
             "method": "POST",
@@ -938,7 +1311,7 @@
                 "{{postId}}"
               ]
             },
-            "description": "Requer token do(a) autor(a) do post ou de ADMIN. `title` e `text` são obrigatórios; `category` é opcional (se ausente, mantém a categoria atual).\n\nRespostas: `200` · `400` (inclui `{ error: \"Categoria inválida.\" }`) · `403` · `404`.",
+            "description": "Requer token do(a) autor(a) do post ou de ADMIN. `title` e `text` são obrigatórios; `category` é opcional (se ausente, mantém a categoria atual).\n\nRespostas: `200` · `400` (inclui `{ error: \"Categoria inválida.\" }`) · `401` sem token · `403` não é o autor nem ADMIN · `404`.",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"title\": \"Post de teste (editado)\",\n  \"text\": \"Conteúdo atualizado via Postman.\",\n  \"category\": \"GEOGRAFIA\"\n}",
@@ -1012,45 +1385,12 @@
               }
             }
           ]
-        },
-        {
-          "name": "Remover post (autor ou ADMIN)",
-          "request": {
-            "method": "DELETE",
-            "header": [],
-            "url": {
-              "raw": "{{baseUrl}}/api/post/{{postId}}",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "api",
-                "post",
-                "{{postId}}"
-              ]
-            },
-            "description": "Requer token do(a) autor(a) do post ou de ADMIN.\n\nRespostas: `200` · `403` · `404`."
-          },
-          "protocolProfileBehavior": {
-            "disableCookies": true
-          },
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test(\"Status 200\", () => pm.response.to.have.status(200));"
-                ]
-              }
-            }
-          ]
         }
       ]
     },
     {
       "name": "5. Limpeza (ADMIN)",
-      "description": "Remove o(a) professor(a) de teste. Fica por último para o *Run collection* funcionar de ponta a ponta.",
+      "description": "Com token de ADMIN: mostra a remoção bloqueada (409) enquanto o professor tem posts, desativa o professor (login dele dá 403), reativa, remove o post, remove o professor (e a conta de login dele) e confirma que o login dele passa a dar 401. Fica por último para o *Run collection* funcionar de ponta a ponta.",
       "item": [
         {
           "name": "Login (admin)",
@@ -1109,6 +1449,504 @@
           ]
         },
         {
+          "name": "Remover professor com posts (409)",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/author/{{authorId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "author",
+                "{{authorId}}"
+              ]
+            },
+            "description": "O(a) professor(a) de teste ainda tem o post criado em **4. Posts**: a remoção é bloqueada com `409` e `postCount`. Para tirar o acesso dele mantendo os posts, use **Desativar professor**."
+          },
+          "protocolProfileBehavior": {
+            "disableCookies": true
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 409\", () => pm.response.to.have.status(409));",
+                  "const body = pm.response.json();",
+                  "pm.test(\"Informa a quantidade de posts\", () => pm.expect(body.postCount).to.eql(1));",
+                  "pm.test(\"Mensagem no singular\", () => pm.expect(body.error).to.eql(\"Este professor tem 1 post. Desative o professor para manter os posts publicados.\"));"
+                ]
+              }
+            }
+          ],
+          "response": [
+            {
+              "name": "409 — professor com posts",
+              "originalRequest": {
+                "method": "DELETE",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/api/author/{{authorId}}",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "author",
+                    "{{authorId}}"
+                  ]
+                }
+              },
+              "status": "Conflict",
+              "code": 409,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"error\": \"Este professor tem 3 posts. Desative o professor para manter os posts publicados.\",\n  \"postCount\": 3\n}"
+            }
+          ]
+        },
+        {
+          "name": "Desativar professor sem token (401)",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/author/{{authorId}}/status",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "author",
+                "{{authorId}}",
+                "status"
+              ]
+            },
+            "description": "Sem o header `Authorization`: `401`.",
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"active\": false\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "protocolProfileBehavior": {
+            "disableCookies": true
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 401\", () => pm.response.to.have.status(401));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Desativar professor com corpo inválido (400)",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/author/{{authorId}}/status",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "author",
+                "{{authorId}}",
+                "status"
+              ]
+            },
+            "description": "`active` precisa ser booleano: `{ \"active\": \"sim\" }` responde `400`.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"active\": \"sim\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "protocolProfileBehavior": {
+            "disableCookies": true
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 400\", () => pm.response.to.have.status(400));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Desativar professor",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/author/{{authorId}}/status",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "author",
+                "{{authorId}}",
+                "status"
+              ]
+            },
+            "description": "Requer token de **ADMIN**. Corpo `{ \"active\": boolean }`. O professor desativado não consegue entrar (login `403`) e tokens já emitidos para ele passam a dar `401`; **os posts dele continuam publicados**. Repetir a mesma ação não é erro (`200`). O `data` tem o mesmo formato de um item de *Listar professores*.\n\nRespostas: `200` · `400` corpo inválido · `401` sem token · `403` não é admin · `404` não encontrado/id inválido · `409` professor sem conta de login.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"active\": false\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "protocolProfileBehavior": {
+            "disableCookies": true
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test(\"active = false\", () => pm.expect(body.data.active).to.eql(false));",
+                  "pm.test(\"Mensagem\", () => pm.expect(body.message).to.eql(\"Professor desativado.\"));",
+                  "pm.test(\"Posts mantidos\", () => pm.expect(body.data.postCount).to.eql(1));",
+                  "pm.test(\"Sem objeto user\", () => pm.expect(body.data).to.not.have.property(\"user\"));"
+                ]
+              }
+            }
+          ],
+          "response": [
+            {
+              "name": "200 — Professor desativado.",
+              "originalRequest": {
+                "method": "PATCH",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/api/author/{{authorId}}/status",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "author",
+                    "{{authorId}}",
+                    "status"
+                  ]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"data\": {\n    \"id\": \"6650f1c2a1b2c3d4e5f60719\",\n    \"name\": \"Ana Silva\",\n    \"userId\": \"6650f1c2a1b2c3d4e5f60718\",\n    \"createdAt\": \"2026-11-03T12:00:00.000Z\",\n    \"updatedAt\": \"2026-11-03T12:00:00.000Z\",\n    \"postCount\": 3,\n    \"active\": false\n  },\n  \"message\": \"Professor desativado.\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "Login de conta desativada (403)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "login"
+              ]
+            },
+            "description": "Com o professor desativado, o login dele é recusado com `403` e nenhuma sessão é criada. (A senha é conferida antes, para não revelar se o e-mail existe.)",
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{authorEmail}}\",\n  \"password\": \"{{authorPassword}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "protocolProfileBehavior": {
+            "disableCookies": true
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 403\", () => pm.response.to.have.status(403));",
+                  "pm.test(\"Mensagem de conta desativada\", () => pm.expect(pm.response.json().error).to.eql(\"Conta desativada. Fale com a coordenação.\"));",
+                  "pm.test(\"Sem token\", () => pm.expect(pm.response.json()).to.not.have.property(\"token\"));"
+                ]
+              }
+            }
+          ],
+          "response": [
+            {
+              "name": "403 — conta desativada",
+              "originalRequest": {
+                "method": "POST",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/api/auth/login",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "auth",
+                    "login"
+                  ]
+                }
+              },
+              "status": "Forbidden",
+              "code": 403,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"error\": \"Conta desativada. Fale com a coordenação.\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "Reativar professor",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/author/{{authorId}}/status",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "author",
+                "{{authorId}}",
+                "status"
+              ]
+            },
+            "description": "Requer token de **ADMIN**. Corpo `{ \"active\": boolean }`. O professor desativado não consegue entrar (login `403`) e tokens já emitidos para ele passam a dar `401`; **os posts dele continuam publicados**. Repetir a mesma ação não é erro (`200`). O `data` tem o mesmo formato de um item de *Listar professores*.\n\nRespostas: `200` · `400` corpo inválido · `401` sem token · `403` não é admin · `404` não encontrado/id inválido · `409` professor sem conta de login.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"active\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "protocolProfileBehavior": {
+            "disableCookies": true
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test(\"active = true\", () => pm.expect(body.data.active).to.eql(true));",
+                  "pm.test(\"Mensagem\", () => pm.expect(body.message).to.eql(\"Professor reativado.\"));",
+                  "pm.test(\"Posts mantidos\", () => pm.expect(body.data.postCount).to.eql(1));",
+                  "pm.test(\"Sem objeto user\", () => pm.expect(body.data).to.not.have.property(\"user\"));"
+                ]
+              }
+            }
+          ],
+          "response": [
+            {
+              "name": "200 — Professor reativado.",
+              "originalRequest": {
+                "method": "PATCH",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/api/author/{{authorId}}/status",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "author",
+                    "{{authorId}}",
+                    "status"
+                  ]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"data\": {\n    \"id\": \"6650f1c2a1b2c3d4e5f60719\",\n    \"name\": \"Ana Silva\",\n    \"userId\": \"6650f1c2a1b2c3d4e5f60718\",\n    \"createdAt\": \"2026-11-03T12:00:00.000Z\",\n    \"updatedAt\": \"2026-11-03T12:00:00.000Z\",\n    \"postCount\": 3,\n    \"active\": true\n  },\n  \"message\": \"Professor reativado.\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "Login do professor reativado",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "login"
+              ]
+            },
+            "description": "Depois de reativado, o login volta a funcionar. Não troca o `{{token}}` (continua o de admin).",
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{authorEmail}}\",\n  \"password\": \"{{authorPassword}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "protocolProfileBehavior": {
+            "disableCookies": true
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 200\", () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Remover post (autor ou ADMIN)",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/post/{{postId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "post",
+                "{{postId}}"
+              ]
+            },
+            "description": "Requer token do(a) autor(a) do post ou de ADMIN (aqui, ADMIN).\n\nRespostas: `200` · `401` sem token · `403` não é o autor nem ADMIN · `404`."
+          },
+          "protocolProfileBehavior": {
+            "disableCookies": true
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 200\", () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
           "name": "Remover professor (ADMIN)",
           "request": {
             "method": "DELETE",
@@ -1124,7 +1962,7 @@
                 "{{authorId}}"
               ]
             },
-            "description": "Requer token de **ADMIN**.\n\nRespostas: `200` · `403` · `404`."
+            "description": "Requer token de **ADMIN**. Sem posts, remove o perfil de professor **e** a conta de login dele.\n\nRespostas: `200` · `401` sem token · `403` não é admin · `404` · `409` professor com posts."
           },
           "protocolProfileBehavior": {
             "disableCookies": true
@@ -1136,6 +1974,56 @@
                 "type": "text/javascript",
                 "exec": [
                   "pm.test(\"Status 200\", () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Login do professor removido (401)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "login"
+              ]
+            },
+            "description": "A conta de login foi apagada junto com o professor: o login agora falha com `401`.",
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{authorEmail}}\",\n  \"password\": \"{{authorPassword}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "protocolProfileBehavior": {
+            "disableCookies": true
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 401\", () => pm.response.to.have.status(401));"
                 ]
               }
             }

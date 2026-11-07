@@ -41,5 +41,9 @@ export const getSession = cache(async (): Promise<User | null> => {
 
     if (!user) return null;
 
+    // Conta desativada pelo ADMIN: tokens/cookies já emitidos deixam de valer
+    // na hora (as rotas respondem 401 e o site trata como deslogado).
+    if (user.deactivatedAt) return null;
+
     return user;
 })

@@ -1,27 +1,31 @@
 import { db } from "@/lib/prisma";
 import { getSession } from "@/lib/dal";
-import { Category, Role } from "../../../../../generated/prisma/client";
+import { isObjectId } from "@/lib/object-id";
+import { Category, Role, type User } from "../../../../../generated/prisma/client";
 import { NextResponse } from "next/server";
+
+const notFound = () =>
+  NextResponse.json({ error: "Post não encontrado." }, { status: 404 });
+
+const unauthorized = () =>
+  NextResponse.json({ error: "Você precisa estar logado." }, { status: 401 });
 
 export async function GET(
   _request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
+  if (!isObjectId(id)) return notFound();
 
   const post = await db.post.findUnique({ where: { id }, include: { authors: true } });
 
-  if (!post) {
-    return NextResponse.json({ error: "Post não encontrado." }, { status: 404 });
-  }
+  if (!post) return notFound();
 
   return NextResponse.json(post);
 }
 
 /** ADMIN pode gerenciar qualquer post; um professor só o próprio. */
-async function canManagePost(postAuthorId: string) {
-  const session = await getSession();
-  if (!session) return false;
+async function canManagePost(session: User, postAuthorId: string) {
   if (session.role === Role.ADMIN) return true;
 
   const author = await db.author.findUnique({ where: { userId: session.id } });
@@ -32,6 +36,10 @@ export async function PUT(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  // Sem sessão (sem token ou token inválido/expirado) é 401; sem permissão é 403.
+  const session = await getSession();
+  if (!session) return unauthorized();
+
   const { id } = await params;
   const body = await request.json();
   const { title, text, category } = body;
@@ -58,12 +66,12 @@ export async function PUT(
     return NextResponse.json({ error: "Categoria inválida." }, { status: 400 });
   }
 
-  const existing = await db.post.findUnique({ where: { id } });
-  if (!existing) {
-    return NextResponse.json({ error: "Post não encontrado." }, { status: 404 });
-  }
+  if (!isObjectId(id)) return notFound();
 
-  if (!(await canManagePost(existing.authorId))) {
+  const existing = await db.post.findUnique({ where: { id } });
+  if (!existing) return notFound();
+
+  if (!(await canManagePost(session, existing.authorId))) {
     return NextResponse.json(
       { error: "Você não tem permissão para editar este post." },
       { status: 403 }
@@ -82,14 +90,16 @@ export async function DELETE(
   _request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const session = await getSession();
+  if (!session) return unauthorized();
+
   const { id } = await params;
+  if (!isObjectId(id)) return notFound();
 
   const existing = await db.post.findUnique({ where: { id } });
-  if (!existing) {
-    return NextResponse.json({ error: "Post não encontrado." }, { status: 404 });
-  }
+  if (!existing) return notFound();
 
-  if (!(await canManagePost(existing.authorId))) {
+  if (!(await canManagePost(session, existing.authorId))) {
     return NextResponse.json(
       { error: "Você não tem permissão para remover este post." },
       { status: 403 }

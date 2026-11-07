@@ -1,6 +1,6 @@
 import { LoginFormSchema } from "@/lib/definition";
 import { db } from "@/lib/prisma";
-import { createSession } from "@/lib/session";
+import { loginSuccessResponse } from "@/lib/login-response";
 import { NextResponse } from "next/server";
 import { compare } from "bcryptjs";
 
@@ -27,24 +27,21 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "E-mail ou senha inválidos." }, { status: 401 });
   }
 
-  const { token, expiresAt } = await createSession(user.id, user.role);
+  // Checado só depois da senha, para não revelar se o e-mail existe.
+  if (user.deactivatedAt) {
+    return NextResponse.json(
+      { error: "Conta desativada. Fale com a coordenação." },
+      { status: 403 }
+    );
+  }
 
-  // Perfil de professor(a) ligado ao usuário; alunos e admin sem perfil não têm.
-  const author = await db.author.findUnique({ where: { userId: user.id } });
+  // Sem sessão: a conta com senha padrão não acessa nenhuma rota protegida.
+  if (user.firstAccess === true) {
+    return NextResponse.json(
+      { error: "Primeiro acesso: defina sua senha no app.", code: "FIRST_ACCESS_REQUIRED" },
+      { status: 403 }
+    );
+  }
 
-  // O cookie `session` continua sendo definido para o front-end Next; o token
-  // no corpo permite que clientes externos usem `Authorization: Bearer <token>`.
-  // `user` traz só o necessário para o app (nunca hash/e-mail).
-  return NextResponse.json({
-    message: "Login realizado com sucesso!",
-    token,
-    tokenType: "Bearer",
-    expiresAt,
-    user: {
-      id: user.id,
-      name: user.name,
-      role: user.role,
-      authorId: author?.id ?? null,
-    },
-  });
+  return loginSuccessResponse(user);
 }

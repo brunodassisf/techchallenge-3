@@ -2,13 +2,11 @@
 
 import { FormState } from "@/lib/definition"
 import { toaster } from "@/components/ui/toaster"
-import usePasswordVisibility from "@/hook/usePasswordVisibility"
-import { Button, Dialog, Field, Input, InputGroup, Portal, Stack } from "@chakra-ui/react"
+import { Button, Dialog, Field, Input, Portal, Stack } from "@chakra-ui/react"
 import { useRouter } from "next/navigation"
 import { useActionState, useEffect, useState } from "react"
 
 const ModalCreateAuthor: React.FC = () => {
-    const inputPassword = usePasswordVisibility()
     const router = useRouter()
     const [open, setOpen] = useState(false)
 
@@ -19,7 +17,6 @@ const ModalCreateAuthor: React.FC = () => {
             body: JSON.stringify({
                 name: formData.get("name"),
                 email: formData.get("email"),
-                password: formData.get("password"),
             }),
         })
         const body = await res.json()
@@ -83,16 +80,6 @@ const ModalCreateAuthor: React.FC = () => {
                                             type="email"
                                             placeholder="email@exemplo.com"
                                         />
-                                    </Field.Root>
-                                    <Field.Root>
-                                        <Field.Label>Senha</Field.Label>
-                                        <InputGroup endElement={inputPassword.endElement}>
-                                            <Input
-                                                name="password"
-                                                type={inputPassword.type}
-                                                placeholder="Senha de acesso"
-                                            />
-                                        </InputGroup>
                                     </Field.Root>
                                 </Stack>
                             </Dialog.Body>
