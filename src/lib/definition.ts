@@ -44,6 +44,17 @@ export const FirstAccessFormSchema = z.object({
     path: ['confirmPassword'],
 });
 
+export const StudentSignUpFormSchema = z.object({
+    name: z.string().trim().min(1, 'Informe o nome.'),
+    email: z.email('Informe um e-mail válido.').trim(),
+    // trim antes do min: uma senha só de espaços não pode passar.
+    password: z.string().trim().min(8, 'A senha deve ter pelo menos 8 caracteres.'),
+    confirmPassword: z.string().trim(),
+}).refine((data) => data.password === data.confirmPassword, {
+    message: 'As senhas não coincidem.',
+    path: ['confirmPassword'],
+});
+
 export const CreatePostFormSchema = z.object({
     title: z.string().min(1, 'Informe o título.').trim(),
     text: z.string().min(1, 'Informe o conteúdo do post.').trim(),

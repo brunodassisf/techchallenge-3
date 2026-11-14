@@ -8,8 +8,12 @@ import type { User } from "../../generated/prisma/client";
  * formato ser idêntico. Cria a sessão: o cookie `session` serve ao front-end
  * Next e o `token` no corpo, a clientes externos (`Authorization: Bearer`).
  * `user` traz só o necessário para o app (nunca hash/e-mail).
+ * `init.status` permite responder 201 no cadastro de estudante; o padrão é 200.
  */
-export async function loginSuccessResponse(user: Pick<User, "id" | "name" | "role">) {
+export async function loginSuccessResponse(
+  user: Pick<User, "id" | "name" | "role">,
+  init?: { status?: number }
+) {
   const { token, expiresAt } = await createSession(user.id, user.role);
 
   // Perfil de professor(a) ligado ao usuário; alunos e admin sem perfil não têm.
@@ -26,5 +30,5 @@ export async function loginSuccessResponse(user: Pick<User, "id" | "name" | "rol
       role: user.role,
       authorId: author?.id ?? null,
     },
-  });
+  }, { status: init?.status });
 }

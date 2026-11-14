@@ -46,6 +46,7 @@ O objetivo é desenvolver uma interface gráfica para a aplicação de blogging 
 - **Detalhe do post** — página dedicada com o conteúdo completo e o nome do(a) professor(a) responsável.
 - **Tema claro/escuro** — alternância de tema persistida entre sessões, com suporte à preferência do sistema operacional.
 - **Login/Cadastro** — modal de login com sessão persistida em cookie.
+- **Cadastro de estudante (API)** — o estudante cria a própria conta em `POST /api/student`, escolhendo a senha, e já sai logado. É usado pelo app mobile; o site não tem tela de cadastro.
 
 **Administrador(a) (`ADMIN`)**
 
@@ -95,9 +96,11 @@ src/
 │   │   ├── author/
 │   │   │   ├── route.ts           # GET (lista, pública) · POST (cria, ADMIN)
 │   │   │   └── [id]/route.ts      # GET (pública) · PUT · DELETE (ADMIN)
-│   │   └── post/
-│   │       ├── route.ts           # GET (lista/busca/filtro, pública) · POST (cria, AUTHOR)
-│   │       └── [id]/route.ts      # GET (pública) · PUT · DELETE (ADMIN ou autor dono do post)
+│   │   ├── post/
+│   │   │   ├── route.ts           # GET (lista/busca/filtro, pública) · POST (cria, AUTHOR)
+│   │   │   └── [id]/route.ts      # GET (pública) · PUT · DELETE (ADMIN ou autor dono do post)
+│   │   └── student/
+│   │       └── route.ts           # POST — cadastro público de estudante (já entra)
 │   │
 │   ├── [post]/                    # Rota dinâmica /:id — detalhe do post (pública)
 │   │   ├── page.tsx
@@ -151,6 +154,7 @@ A aplicação usa autenticação própria (sem provedor externo), baseada em ses
   - `verifySession()` — decodifica o JWT (do header `Authorization` ou do cookie) e devolve só o payload assinado (`userId`, `role`, `expiresAt`), sem consultar o banco.
   - `getSession()` — decodifica o JWT (header ou cookie) e busca o registro `User` completo no banco (usado por toda a API e pelas páginas que precisam do usuário logado). Se a conta estiver **desativada** (`User.deactivatedAt` preenchido), devolve `null`: tokens e cookies já emitidos deixam de valer na hora, as rotas protegidas respondem `401` e o site trata a pessoa como deslogada.
 - **Primeiro acesso:** o professor cadastrado pelo ADMIN nasce com a senha padrão (`DEFAULT_TEACHER_PASSWORD`) e `User.firstAccess: true`. Enquanto isso, o login responde `403` com `code: "FIRST_ACCESS_REQUIRED"` e **não** cria sessão, então a conta com senha padrão não acessa nenhuma rota protegida. O professor define a própria senha em `POST /api/auth/first-access`, que já devolve a mesma resposta do login. Contas antigas, sem o campo, entram normalmente. O site não tem tela de primeiro acesso: ele só mostra a mensagem, e a senha é definida pelo app.
+- **Cadastro de estudante:** `POST /api/student` é público. O estudante escolhe a própria senha (sem senha padrão e sem primeiro acesso), e a conta `User` (papel `STUDENT`) e o perfil `Student` são criados juntos, numa única operação. A resposta é a mesma do login, com status `201`, então o app já entra.
 - **Conta desativada:** o ADMIN pode desativar/reativar professores (`PATCH /api/author/:id/status`). O login de uma conta desativada responde `403` `{ "error": "Conta desativada. Fale com a coordenação." }` e não cria sessão. Essa checagem acontece só depois de conferir a senha, para não revelar se o e-mail existe. Os posts do professor desativado continuam publicados com o nome dele.
 
 ### Papéis (`Role`)
@@ -159,14 +163,14 @@ A aplicação usa autenticação própria (sem provedor externo), baseada em ses
 | --- | --- | --- |
 | `ADMIN` | `/admin`, e qualquer post via API (edição/exclusão) | Único papel que pode cadastrar/editar/desativar/remover professores(as) |
 | `AUTHOR` (professor(a)) | `/area-professor` | Só gerencia (edita/exclui) os próprios posts |
-| `STUDENT` (estudante) | Apenas as páginas públicas | Papel previsto no modelo de dados, mas hoje sem dashboard ou cadastro próprios — funciona como um visitante autenticado |
+| `STUDENT` (estudante) | Apenas as páginas públicas | Cria a própria conta em `POST /api/student`. Ainda sem dashboard próprio: funciona como um visitante autenticado e não cria posts (`POST /api/post` responde `403`) |
 
 ### Proteção de rotas
 
 - **Páginas**: `src/proxy.ts` (o `middleware.ts` do Next 16) intercepta a navegação (exceto `/api`, arquivos estáticos e `favicon.ico`) e redireciona para `/` sempre que o papel da sessão não corresponder ao exigido pela rota: `/admin` exige `ADMIN`, `/area-professor` exige `AUTHOR`. A rota `/` é pública para todos os papéis, inclusive visitantes sem sessão.
 - **API**: o `proxy.ts` **não** protege `/api/**`. Cada Route Handler faz sua própria checagem chamando `getSession()` e validando papel/posse do recurso — por isso a tabela de endpoints abaixo detalha a regra de autorização rota a rota.
 
-> `User.origemId` e o modelo `Student` existem no schema do Prisma, mas não têm nenhum uso funcional no código hoje — são um espaço reservado para uma futura área do(a) estudante.
+> O modelo `Student` é criado no cadastro de estudante (`POST /api/student`), ligado ao `User` por `userId`. `User.origemId` existe no schema do Prisma, mas não tem uso funcional no código hoje.
 
 ## Modelo de dados
 
@@ -433,6 +437,46 @@ curl -X POST http://localhost:3000/api/author   -H "Authorization: Bearer <token
 
 Uma coleção pronta do Postman, já configurada com Bearer token e com todos os endpoints, está em [`postman/TechChallenge3.postman_collection.json`](postman/TechChallenge3.postman_collection.json) (Postman › *Import*).
 
+### Estudantes — `/api/student`
+
+| Método | Rota | Auth | Corpo da requisição | Resposta |
+| --- | --- | --- | --- | --- |
+| `POST` | `/api/student` | Pública | `{ "name": string, "email": string, "password": string (mín. 8), "confirmPassword": string }` | `201` — mesmo formato do login (também define o cookie `session`) · `400` validação · `409` e-mail já cadastrado |
+
+- Cria a conta `User` (papel `STUDENT`) e o perfil `Student` numa única operação, então não sobra conta sem perfil. Não existe senha padrão nem primeiro acesso: a senha é a que o estudante escolheu.
+- `name`, `email` e as senhas passam por `trim`. Uma senha só de espaços não tem 8 caracteres e responde `400`.
+- A resposta nunca traz hash nem e-mail. `user.authorId` é sempre `null`, porque estudante não tem perfil de autor.
+
+**Resposta `201`:**
+
+```json
+{
+  "message": "Login realizado com sucesso!",
+  "token": "eyJhbGciOiJIUzI1NiJ9...",
+  "tokenType": "Bearer",
+  "expiresAt": "2026-11-20T12:00:00.000Z",
+  "user": { "id": "6650f1c2a1b2c3d4e5f60720", "name": "Lia Souza", "role": "STUDENT", "authorId": null }
+}
+```
+
+**Erros:**
+
+```json
+{ "errors": { "confirmPassword": ["As senhas não coincidem."] } }
+```
+
+`400`: cada campo inválido aparece em `errors` (`name`: "Informe o nome."; `email`: "Informe um e-mail válido."; `password`: "A senha deve ter pelo menos 8 caracteres."). Um corpo que não é JSON responde `400` `{ "errors": {} }`.
+
+```json
+{ "error": "Já existe uma conta com esse e-mail." }
+```
+
+`409`: o e-mail já pertence a outra conta (estudante, professor ou admin), inclusive quando dois cadastros com o mesmo e-mail chegam ao mesmo tempo.
+
+```bash
+curl -X POST http://localhost:3000/api/student   -H "Content-Type: application/json"   -d '{"name":"Lia Souza","email":"lia@escola.com","password":"minhasenha123","confirmPassword":"minhasenha123"}'
+```
+
 ### Autores — `/api/author`
 
 | Método | Rota | Auth | Corpo da requisição | Resposta |
@@ -554,7 +598,7 @@ A resposta também inclui um header `Set-Cookie: session=...` — reenvie esse c
 
 ## Roadmap / Melhorias futuras
 
-- [ ] Dashboard e cadastro próprios para o papel `STUDENT` (hoje só existe no modelo de dados/sessão, sem tela dedicada).
+- [ ] Dashboard e tela de cadastro no site para o papel `STUDENT` (hoje o cadastro existe só na API, `POST /api/student`, usada pelo app mobile).
 - [ ] Telas administrativas para editar/excluir posts de qualquer autor (hoje essa permissão do `ADMIN` só existe via API, sem interface).
 - [ ] Invalidar o cache do TanStack Query ao criar um post (`ModalCreatePost` hoje usa `router.refresh()`, que não atualiza as listas que usam `useQuery`/`useMutation`) — pode exigir um reload manual para o novo post aparecer.
 - [ ] Paginação (ou scroll infinito) na listagem de posts.
