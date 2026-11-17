@@ -102,7 +102,7 @@ src/
 │   │   │   ├── route.ts           # GET (lista/busca/filtro, pública) · POST (cria, AUTHOR)
 │   │   │   └── [id]/route.ts      # GET (pública) · PUT · DELETE (ADMIN ou autor dono do post)
 │   │   └── student/
-│   │       ├── route.ts           # POST — cadastro público de estudante (já entra)
+│   │       ├── route.ts           # POST — cadastro público (já entra) · GET — lista (ADMIN)
 │   │       ├── me/route.ts        # GET · PUT — dados do estudante logado (STUDENT)
 │   │       └── [id]/              # PUT · DELETE e reset-password/ (POST) — gestão pelo ADMIN
 │   │
