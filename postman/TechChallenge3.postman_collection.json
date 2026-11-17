@@ -110,7 +110,7 @@
                 "login"
               ]
             },
-            "description": "Autentica o usuário ADMIN criado pelo seed (`ADMIN_EMAIL`/`ADMIN_PASSWORD`). A resposta traz `token` (JWT), que o script salva em `{{token}}`; a coleção passa a enviá-lo como `Authorization: Bearer {{token}}` em todas as requisições.\n\nRespostas: `200` `{ message, token, tokenType, expiresAt, user: { id, name, role, authorId } }` · `400` validação · `401` e-mail ou senha inválidos · `403` conta desativada pelo ADMIN (não cria sessão).\n\n`user` traz só esses quatro campos (nunca `hash`/`email`). `authorId` é o id do `Author` ligado ao usuário, ou `null` para alunos e admin sem perfil de professor(a).",
+            "description": "Autentica o usuário ADMIN criado ao subir a API (`ADMIN_EMAIL`/`ADMIN_PASSWORD`). A resposta traz `token` (JWT), que o script salva em `{{token}}`; a coleção passa a enviá-lo como `Authorization: Bearer {{token}}` em todas as requisições.\n\nRespostas: `200` `{ message, token, tokenType, expiresAt, user: { id, name, role, authorId } }` · `400` validação · `401` e-mail ou senha inválidos · `403` conta desativada pelo ADMIN (não cria sessão).\n\n`user` traz só esses quatro campos (nunca `hash`/`email`). `authorId` é o id do `Author` ligado ao usuário, ou `null` para alunos e admin sem perfil de professor(a).",
             "auth": {
               "type": "noauth"
             },

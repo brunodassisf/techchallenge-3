@@ -130,8 +130,7 @@ src/
 └── components/ui/       # Snippets do Chakra UI (provider, color-mode, tooltip, toaster)
 
 prisma/
-├── schema.prisma        # Modelos User, Author, Student, Post (MongoDB)
-└── seed.ts              # Cria o usuário ADMIN inicial a partir de variáveis de ambiente
+└── schema.prisma        # Modelos User, Author, Student, Post, Comment (MongoDB)
 ```
 
 Fluxo de dados:
@@ -308,8 +307,8 @@ Crie um arquivo `.env` na raiz do projeto com as variáveis abaixo (sem elas a a
 | --- | --- |
 | `DATABASE_URL` | Connection string do MongoDB usada pelo Prisma |
 | `SESSION_SECRET` | Segredo usado para assinar/verificar o JWT da sessão (string longa e aleatória) |
-| `ADMIN_EMAIL` | E-mail do usuário administrador criado pelo script de seed |
-| `ADMIN_PASSWORD` | Senha (em texto puro) do usuário administrador — é hasheada no momento do seed |
+| `ADMIN_EMAIL` | E-mail do usuário administrador criado ao subir a API, se o banco não tiver nenhum `ADMIN` |
+| `ADMIN_PASSWORD` | Senha (em texto puro) do usuário administrador — é hasheada na criação |
 | `ADMIN_NAME` | Nome de exibição do usuário administrador |
 | `DEFAULT_TEACHER_PASSWORD` | Senha padrão dos professores recém-cadastrados (mínimo de 8 caracteres), trocada por eles no primeiro acesso. Sem ela, `POST /api/author` responde `500`, e o `docker compose` não sobe (o Compose exige a variável) |
 
@@ -324,10 +323,8 @@ npx prisma generate
 # 5. Sincronizar o schema com o banco
 npx prisma db push
 
-# 6. Criar o usuário administrador inicial
-npm run db:seed
-
-# 7. Rodar o servidor de desenvolvimento
+# 6. Rodar o servidor de desenvolvimento
+#    (ao subir, cria o ADMIN do .env se o banco ainda não tiver nenhum ADMIN)
 npm run dev
 ```
 
@@ -344,8 +341,6 @@ A aplicação fica disponível em [http://localhost:3000](http://localhost:3000)
 | `npm run start` | Sobe o servidor a partir do build de produção |
 | `npm run lint` | Executa o ESLint no projeto |
 | `npm run typecheck` | Gera os tipos de rotas do Next (`next typegen`) e roda o `tsc --noEmit` |
-| `npm run db:seed` | Cria (ou atualiza) o usuário `ADMIN` inicial a partir do `.env` |
-| `npm run db:backfill-category` | Grava `category: "GERAL"` nos posts criados antes de o campo existir (idempotente) |
 
 ## Docker
 
@@ -363,8 +358,8 @@ O `docker-compose.yml` orquestra os serviços nesta ordem:
 | --- | --- |
 | `mongodb` | MongoDB 7 como replica set de nó único (exigido pelo Prisma para transações), exposto em `localhost:27018` |
 | `mongodb-init` | Inicializa o replica set, espera o nó virar primário e encerra |
-| `migrate` | Roda `prisma db push` (sincroniza o schema) e `npm run db:seed` (cria o admin) e encerra |
-| `app` | A aplicação Next.js em produção, na porta `3000`, com healthcheck |
+| `migrate` | Roda `prisma db push` (sincroniza o schema) e encerra |
+| `app` | A aplicação Next.js em produção, na porta `3000`, com healthcheck. Ao subir, cria o admin se o banco não tiver nenhum `ADMIN` |
 | `mongo-express` | Interface web para inspecionar o banco |
 
 O `Dockerfile` é *multi-stage*: um estágio instala as dependências (`npm ci`), outro gera o Prisma Client e roda o `next build` com `output: "standalone"`, e o estágio final (`runner`) leva só o servidor mínimo gerado pelo Next, sem devDependencies, executando como usuário não-root. O serviço `migrate` reaproveita o estágio de build, que já contém o Prisma CLI.
@@ -628,7 +623,6 @@ curl -X PUT http://localhost:3000/api/student/<id>   -H "Authorization: Bearer <
 - **Criação (`POST`)**: `category` é opcional; se vier ausente, o post é criado como `GERAL`.
 - **Edição (`PUT`)**: `category` é opcional; se vier ausente, a categoria atual do post é mantida.
 - Qualquer valor fora da lista retorna `400`.
-- **Posts antigos**: posts criados antes de o campo existir não têm `category` gravado no MongoDB. O Prisma devolve `GERAL` na leitura, mas filtros por categoria não os encontram. Rode uma vez `npm run db:backfill-category` (idempotente) para gravar `GERAL` neles.
 
 **Exemplo — busca pelo nome do autor** (`GET /api/post?q=silva`): devolve os posts cujo título ou texto contém "silva" **e** os posts de qualquer autor(a) com "silva" no nome.
 

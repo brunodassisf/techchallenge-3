@@ -64,7 +64,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v5
 
-      - name: Subir a stack completa (MongoDB + migrate/seed + app)
+      - name: Subir a stack completa (MongoDB + migrate + app)
         run: docker compose up -d --build --wait --wait-timeout 300 app
 
       - name: Smoke test da aplicação

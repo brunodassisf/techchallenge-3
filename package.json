@@ -7,9 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "typecheck": "next typegen && tsc --noEmit",
-    "db:seed": "tsx prisma/seed.ts",
-    "db:backfill-category": "tsx prisma/backfill-category.ts"
+    "typecheck": "next typegen && tsc --noEmit"
   },
   "dependencies": {
     "@chakra-ui/react": "^3.37.0",

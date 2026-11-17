@@ -6,7 +6,7 @@
 #   deps    -> instala as dependências (npm ci, com cache do lockfile)
 #   builder -> gera o Prisma Client e roda "next build" (output standalone).
 #              Também é usado pelo serviço "migrate" do docker-compose, pois
-#              contém o Prisma CLI e o tsx (db push + seed).
+#              contém o Prisma CLI (db push).
 #   runner  -> imagem final enxuta: só o servidor standalone, sem devDeps,
 #              rodando como usuário não-root.
 # ---------------------------------------------------------------------------

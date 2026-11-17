@@ -43,8 +43,8 @@ services:
           print("Primary ready.");
         '
 
-  # Sincroniza o schema do Prisma com o banco e cria o usuário admin.
-  # Usa o estágio "builder" do Dockerfile (tem Prisma CLI e tsx) e encerra.
+  # Sincroniza o schema do Prisma com o banco e encerra.
+  # Usa o estágio "builder" do Dockerfile (tem o Prisma CLI).
   migrate:
     build:
       context: .
@@ -57,10 +57,7 @@ services:
     restart: "no"
     environment:
       DATABASE_URL: mongodb://mongodb:27017/techchallenge3?replicaSet=rs0
-      ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@techchallenge.com}
-      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-admin123}
-      ADMIN_NAME: ${ADMIN_NAME:-Administrador}
-    command: ["sh", "-c", "npx prisma db push --skip-generate && npm run db:seed"]
+    command: ["npx", "prisma", "db", "push", "--skip-generate"]
 
   app:
     build:
@@ -78,6 +75,10 @@ services:
       DATABASE_URL: mongodb://mongodb:27017/techchallenge3?replicaSet=rs0
       SESSION_SECRET: ${SESSION_SECRET:-troque-este-segredo-em-producao-por-uma-string-longa}
       DEFAULT_TEACHER_PASSWORD: ${DEFAULT_TEACHER_PASSWORD:?Defina DEFAULT_TEACHER_PASSWORD no .env}
+      # Admin inicial: criado ao subir a API só se o banco não tiver nenhum ADMIN.
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@techchallenge.com}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-admin123}
+      ADMIN_NAME: ${ADMIN_NAME:-Administrador}
       # O servidor chama as próprias rotas /api por HTTP dentro do container.
       INTERNAL_API_URL: http://localhost:3000
       # Sem HTTPS local: permite que o navegador aceite o cookie de sessão.
