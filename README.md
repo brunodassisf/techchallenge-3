@@ -217,6 +217,7 @@ model Student {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   userId    String   @db.ObjectId @unique
+  comments  Comment[]
 }
 
 model Post {
@@ -226,6 +227,18 @@ model Post {
   authors   Author   @relation(fields: [authorId], references: [id])
   authorId  String   @db.ObjectId
   category  Category @default(GERAL)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  comments  Comment[]
+}
+
+model Comment {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  text      String
+  post      Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
+  postId    String   @db.ObjectId
+  student   Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  studentId String   @db.ObjectId
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
@@ -247,7 +260,8 @@ enum Category {
 - `Author` representa o perfil de professor(a); é criado junto com o `User` (`role: AUTHOR`) quando um(a) administrador(a) cadastra um(a) novo(a) professor(a).
 - `Post` pertence a exatamente um `Author` (`authorId`); um `Author` pode ter vários posts. Não existe relação direta entre `Post` e `User`/`Student` — a posse de um post é sempre resolvida via `Author.userId === session.id`.
 - O campo de relação em `Post` chama-se `authors` mas é **singular** (um único autor por post) — o nome no plural é só uma convenção de nomenclatura do schema, não indica um array.
-- `Student` e `User.origemId` estão modelados, mas nenhuma rota ou tela do projeto os utiliza atualmente.
+- `Comment` pertence a um `Post` e a um `Student`. Apagar o post ou o estudante apaga os comentários dele (`onDelete: Cascade`).
+- `User.origemId` está modelado, mas nenhuma rota ou tela usa.
 
 ## Dependências principais
 
@@ -404,7 +418,7 @@ Além de consumida pelo próprio front-end (via Server Actions e serviços clien
 
 | Método | Rota | Auth | Corpo da requisição | Resposta |
 | --- | --- | --- | --- | --- |
-| `POST` | `/api/auth/login` | Pública | `{ "email": string, "password": string }` | `200` — `{ message, token, tokenType: "Bearer", expiresAt, user: { id, name, role, authorId } }` (também define o cookie `session`) · `400` erros de validação · `401` credenciais inválidas · `403` conta desativada ou primeiro acesso pendente (não cria sessão; veja abaixo) |
+| `POST` | `/api/auth/login` | Pública | `{ "email": string, "password": string }` | `200` — `{ message, token, tokenType: "Bearer", expiresAt, user: { id, name, role, authorId, studentId } }` (também define o cookie `session`) · `400` erros de validação · `401` credenciais inválidas · `403` conta desativada ou primeiro acesso pendente (não cria sessão; veja abaixo) |
 | `POST` | `/api/auth/first-access` | Pública | `{ "email": string, "currentPassword": string, "password": string (mín. 8), "confirmPassword": string }` | `200` — mesmo formato do login (também define o cookie `session`) · `400` validação · `401` credenciais inválidas · `403` conta desativada · `409` senha já definida |
 | `POST` | `/api/auth/logout` | Pública | — | `200` — `{ message }` (remove o cookie `session`) |
 
@@ -455,7 +469,7 @@ Uma coleção pronta do Postman, já configurada com Bearer token e com todos os
 
 - Cria a conta `User` (papel `STUDENT`) e o perfil `Student` numa única operação, então não sobra conta sem perfil. Não existe senha padrão nem primeiro acesso: a senha é a que o estudante escolheu.
 - `name`, `email` e as senhas passam por `trim`. Uma senha só de espaços não tem 8 caracteres e responde `400`.
-- A resposta nunca traz hash nem e-mail. `user.authorId` é sempre `null`, porque estudante não tem perfil de autor.
+- A resposta nunca traz hash nem e-mail. `user.authorId` é sempre `null`, porque estudante não tem perfil de autor. `user.studentId` é o id do perfil `Student`.
 
 **Resposta `201`:**
 
@@ -465,7 +479,7 @@ Uma coleção pronta do Postman, já configurada com Bearer token e com todos os
   "token": "eyJhbGciOiJIUzI1NiJ9...",
   "tokenType": "Bearer",
   "expiresAt": "2026-11-20T12:00:00.000Z",
-  "user": { "id": "6650f1c2a1b2c3d4e5f60720", "name": "Lia Souza", "role": "STUDENT", "authorId": null }
+  "user": { "id": "6650f1c2a1b2c3d4e5f60720", "name": "Lia Souza", "role": "STUDENT", "authorId": null, "studentId": "6650f1c2a1b2c3d4e5f60730" }
 }
 ```
 
@@ -592,6 +606,10 @@ curl -X PUT http://localhost:3000/api/student/<id>   -H "Authorization: Bearer <
 | `GET` | `/api/post/:id` | Pública | — | `200` — `Post` (com `category`) · `404` se não encontrado ou id inválido |
 | `PUT` | `/api/post/:id` | **ADMIN ou o(a) autor(a) dono(a) do post** | `{ "title": string, "text": string, "category"?: Category }` | `200` — `{ data, message }` · `400` (categoria inválida: `{ "error": "Categoria inválida." }`) · `401` sem sessão · `403` não é o autor nem ADMIN · `404` |
 | `DELETE` | `/api/post/:id` | **ADMIN ou o(a) autor(a) dono(a) do post** | — | `200` — `{ message }` · `401` sem sessão · `403` não é o autor nem ADMIN · `404` |
+| `GET` | `/api/post/:id/comment` | Pública | — | `200` — comentários do post, do mais antigo para o mais novo: `[{ id, text, postId, studentId, createdAt, updatedAt, student: { id, name } }]` · `404` post inexistente |
+| `POST` | `/api/post/:id/comment` | **STUDENT** | `{ "text": string }` (1–1000, com trim) | `201` — `{ data: comentário, message }` · `400` `{ errors: { text } }` · `401` sem sessão · `403` não é estudante · `404` post inexistente |
+| `PUT` | `/api/comment/:id` | Dono do comentário | `{ "text": string }` | `200` — `{ data: comentário, message }` · `400` · `401` · `403` não é o dono · `404` |
+| `DELETE` | `/api/comment/:id` | Dono, professor dono do post ou ADMIN | — | `200` — `{ message }` · `401` · `403` · `404` |
 
 **Matéria do post (`category`)** — enum `Category`, aceito exatamente com estes valores:
 
@@ -632,12 +650,13 @@ curl -i -X POST http://localhost:3000/api/auth/login \
     "id": "6650f1c2a1b2c3d4e5f60718",
     "name": "Ana Silva",
     "role": "AUTHOR",
-    "authorId": "6650f1c2a1b2c3d4e5f60719"
+    "authorId": "6650f1c2a1b2c3d4e5f60719",
+    "studentId": null
   }
 }
 ```
 
-O objeto `user` identifica quem está logado e traz só estes quatro campos (nunca `hash` nem `email`):
+O objeto `user` identifica quem está logado e traz só estes cinco campos (nunca `hash` nem `email`):
 
 | Campo | Descrição |
 | --- | --- |
@@ -645,6 +664,7 @@ O objeto `user` identifica quem está logado e traz só estes quatro campos (nun
 | `name` | nome do usuário (ex.: para exibir as iniciais) |
 | `role` | `ADMIN`, `AUTHOR` ou `STUDENT` (ex.: mostrar ou esconder o botão de criar post) |
 | `authorId` | id do registro `Author` ligado ao usuário (compare com `post.authorId` para saber se o post é dele e liberar editar/excluir), ou `null` quando o usuário não tem perfil de professor(a) (alunos e admin sem perfil de autor) |
+| `studentId` | id do registro `Student` ligado ao usuário (compare com `comment.studentId` para saber se o comentário é dele e liberar editar/excluir), ou `null` quando o usuário não é estudante |
 
 A resposta também inclui um header `Set-Cookie: session=...` — reenvie esse cookie nas próximas requisições (por exemplo, `curl -b cookies.txt -c cookies.txt ...`) ou use o `token` no header `Authorization: Bearer <token>` para acessar rotas autenticadas, como `POST /api/post`.
 
