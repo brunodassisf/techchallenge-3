@@ -58,6 +58,14 @@
     {
       "key": "studentPassword",
       "value": "senhaEstudante123"
+    },
+    {
+      "key": "studentNewPassword",
+      "value": "novaSenhaEstudante123"
+    },
+    {
+      "key": "studentToken",
+      "value": ""
     }
   ],
   "item": [
@@ -2079,7 +2087,7 @@
     },
     {
       "name": "7. Estudantes",
-      "description": "Cadastro público de estudante (`POST /api/student`), usado pelo botão \"Cadastre-se\" do app. Não depende das outras pastas.",
+      "description": "Cadastro público de estudante (`POST /api/student`), usado pelo botão \"Cadastre-se\" do app, e a tela \"Meus dados\" (`GET`/`PUT /api/student/me`) com o token do estudante recém-cadastrado. Não depende das outras pastas.",
       "item": [
         {
           "name": "Cadastrar estudante",
@@ -2101,7 +2109,7 @@
                 "student"
               ]
             },
-            "description": "Pública. O estudante escolhe a senha e já sai logado: a resposta é a **mesma do login**, com status `201`. Cria a conta `User` (papel `STUDENT`) e o perfil `Student` juntos.\n\nO script de pré-requisição gera um `studentEmail` novo a cada execução, então a coleção pode ser rodada várias vezes. O `token` do estudante **não** substitui `{{token}}`.\n\nRespostas: `201` · `400` validação · `409` e-mail já cadastrado.",
+            "description": "Pública. O estudante escolhe a senha e já sai logado: a resposta é a **mesma do login**, com status `201`. Cria a conta `User` (papel `STUDENT`) e o perfil `Student` juntos.\n\nO script de pré-requisição gera um `studentEmail` novo a cada execução, então a coleção pode ser rodada várias vezes. O `token` do estudante vai para `{{studentToken}}` (usado em *Meus dados*) e **não** substitui `{{token}}`.\n\nRespostas: `201` · `400` validação · `409` e-mail já cadastrado.",
             "auth": {
               "type": "noauth"
             },
@@ -2143,7 +2151,8 @@
                   "pm.test(\"Papel STUDENT, sem perfil de autor\", () => {",
                   "  pm.expect(body.user.role).to.eql(\"STUDENT\");",
                   "  pm.expect(body.user.authorId).to.be.null;",
-                  "});"
+                  "});",
+                  "pm.collectionVariables.set(\"studentToken\", body.token);"
                 ]
               }
             }
@@ -2375,6 +2384,597 @@
                 }
               ],
               "body": "{\n  \"errors\": {\n    \"confirmPassword\": [\n      \"As senhas não coincidem.\"\n    ]\n  }\n}"
+            }
+          ]
+        },
+        {
+          "name": "Meus dados",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/student/me",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "student",
+                "me"
+              ]
+            },
+            "description": "Requer token de **STUDENT** (`{{studentToken}}`, salvo por *Cadastrar estudante*). Devolve só `name` e `email`.\n\nRespostas: `200` · `401` sem sessão · `403` não é estudante.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{studentToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "protocolProfileBehavior": {
+            "disableCookies": true
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test(\"Só name e email\", () => pm.expect(body).to.have.all.keys(\"name\", \"email\"));",
+                  "pm.test(\"E-mail do estudante cadastrado\", () => pm.expect(body.email).to.eql(pm.collectionVariables.get(\"studentEmail\")));"
+                ]
+              }
+            }
+          ],
+          "response": [
+            {
+              "name": "200 — meus dados",
+              "originalRequest": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/api/student/me",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "student",
+                    "me"
+                  ]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"name\": \"Lia Souza\",\n  \"email\": \"estudante.1763000000000@techchallenge.com\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "Editar meus dados (nome)",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/student/me",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "student",
+                "me"
+              ]
+            },
+            "description": "Só o nome muda: `currentPassword` não é exigida. O nome é gravado no `User` e no `Student`.\n\nRespostas: `200` · `400` validação ou senha atual ausente/incorreta · `401` sem sessão · `403` não é estudante · `409` e-mail já usado.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{studentToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Lia Souza Editada\",\n  \"email\": \"{{studentEmail}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "protocolProfileBehavior": {
+            "disableCookies": true
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test(\"Usuário atualizado (sem hash)\", () => {",
+                  "  pm.expect(body.user).to.have.all.keys(\"id\", \"name\", \"role\", \"authorId\");",
+                  "  pm.expect(body.user.name).to.eql(\"Lia Souza Editada\");",
+                  "  pm.expect(body.user.authorId).to.be.null;",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "response": [
+            {
+              "name": "200 — nome atualizado",
+              "originalRequest": {
+                "method": "PUT",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/student/me",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "student",
+                    "me"
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"name\": \"Lia Souza Editada\",\n  \"email\": \"{{studentEmail}}\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"user\": {\n    \"id\": \"6650f1c2a1b2c3d4e5f60720\",\n    \"name\": \"Lia Souza Editada\",\n    \"role\": \"STUDENT\",\n    \"authorId\": null\n  }\n}"
+            }
+          ]
+        },
+        {
+          "name": "Trocar e-mail sem senha atual (400)",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/student/me",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "student",
+                "me"
+              ]
+            },
+            "description": "Trocar o e-mail exige `currentPassword`. Responde `400`, não `401`, para o app não deslogar a pessoa.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{studentToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Lia Souza Editada\",\n  \"email\": \"novo.{{studentEmail}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "protocolProfileBehavior": {
+            "disableCookies": true
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 400\", () => pm.response.to.have.status(400));",
+                  "pm.test(\"Erro em currentPassword\", () => pm.expect(pm.response.json().errors.currentPassword).to.eql([\"Informe a senha atual.\"]));"
+                ]
+              }
+            }
+          ],
+          "response": [
+            {
+              "name": "400 — senha atual ausente",
+              "originalRequest": {
+                "method": "PUT",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/student/me",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "student",
+                    "me"
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"name\": \"Lia Souza Editada\",\n  \"email\": \"novo.{{studentEmail}}\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "status": "Bad Request",
+              "code": 400,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"errors\": {\n    \"currentPassword\": [\n      \"Informe a senha atual.\"\n    ]\n  }\n}"
+            }
+          ]
+        },
+        {
+          "name": "Senha atual incorreta (400)",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/student/me",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "student",
+                "me"
+              ]
+            },
+            "description": "`currentPassword` errada. Responde `400`, não `401`, para o app não deslogar a pessoa.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{studentToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Lia Souza Editada\",\n  \"email\": \"novo.{{studentEmail}}\",\n  \"currentPassword\": \"senhaErrada123\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "protocolProfileBehavior": {
+            "disableCookies": true
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 400\", () => pm.response.to.have.status(400));",
+                  "pm.test(\"Erro em currentPassword\", () => pm.expect(pm.response.json().errors.currentPassword).to.eql([\"Senha atual incorreta.\"]));"
+                ]
+              }
+            }
+          ],
+          "response": [
+            {
+              "name": "400 — senha atual incorreta",
+              "originalRequest": {
+                "method": "PUT",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/student/me",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "student",
+                    "me"
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"name\": \"Lia Souza Editada\",\n  \"email\": \"novo.{{studentEmail}}\",\n  \"currentPassword\": \"senhaErrada123\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "status": "Bad Request",
+              "code": 400,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"errors\": {\n    \"currentPassword\": [\n      \"Senha atual incorreta.\"\n    ]\n  }\n}"
+            }
+          ]
+        },
+        {
+          "name": "E-mail já usado (409)",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/student/me",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "student",
+                "me"
+              ]
+            },
+            "description": "E-mail de outra conta (aqui, o do admin), com a senha atual certa. Nada é alterado.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{studentToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Lia Souza Editada\",\n  \"email\": \"{{adminEmail}}\",\n  \"currentPassword\": \"{{studentPassword}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "protocolProfileBehavior": {
+            "disableCookies": true
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 409\", () => pm.response.to.have.status(409));",
+                  "pm.test(\"Mensagem de e-mail repetido\", () => pm.expect(pm.response.json().error).to.eql(\"Já existe uma conta com esse e-mail.\"));"
+                ]
+              }
+            }
+          ],
+          "response": [
+            {
+              "name": "409 — e-mail já usado",
+              "originalRequest": {
+                "method": "PUT",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/student/me",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "student",
+                    "me"
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"name\": \"Lia Souza Editada\",\n  \"email\": \"{{adminEmail}}\",\n  \"currentPassword\": \"{{studentPassword}}\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "status": "Conflict",
+              "code": 409,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"error\": \"Já existe uma conta com esse e-mail.\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "Trocar senha",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/student/me",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "student",
+                "me"
+              ]
+            },
+            "description": "Troca a senha para `{{studentNewPassword}}`, informando a atual. O token continua valendo depois da troca.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{studentToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Lia Souza Editada\",\n  \"email\": \"{{studentEmail}}\",\n  \"currentPassword\": \"{{studentPassword}}\",\n  \"password\": \"{{studentNewPassword}}\",\n  \"confirmPassword\": \"{{studentNewPassword}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "protocolProfileBehavior": {
+            "disableCookies": true
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"Papel STUDENT\", () => pm.expect(pm.response.json().user.role).to.eql(\"STUDENT\"));"
+                ]
+              }
+            }
+          ],
+          "response": [
+            {
+              "name": "200 — senha trocada",
+              "originalRequest": {
+                "method": "PUT",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/student/me",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "student",
+                    "me"
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"name\": \"Lia Souza Editada\",\n  \"email\": \"{{studentEmail}}\",\n  \"currentPassword\": \"{{studentPassword}}\",\n  \"password\": \"{{studentNewPassword}}\",\n  \"confirmPassword\": \"{{studentNewPassword}}\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"user\": {\n    \"id\": \"6650f1c2a1b2c3d4e5f60720\",\n    \"name\": \"Lia Souza Editada\",\n    \"role\": \"STUDENT\",\n    \"authorId\": null\n  }\n}"
             }
           ]
         }

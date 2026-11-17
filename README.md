@@ -47,10 +47,11 @@ O objetivo é desenvolver uma interface gráfica para a aplicação de blogging 
 - **Tema claro/escuro** — alternância de tema persistida entre sessões, com suporte à preferência do sistema operacional.
 - **Login/Cadastro** — modal de login com sessão persistida em cookie.
 - **Cadastro de estudante (API)** — o estudante cria a própria conta em `POST /api/student`, escolhendo a senha, e já sai logado. É usado pelo app mobile; o site não tem tela de cadastro.
+- **Meus dados do estudante (API)** — o estudante logado vê e edita nome, e-mail e senha em `GET`/`PUT /api/student/me` (tela "Meus dados" do app).
 
 **Administrador(a) (`ADMIN`)**
 
-- Acesso à área `/admin`, com listagem de todos(as) os(as) professores(as) cadastrados(as).
+- Acesso à área `/admin`, com abas de professores(as) e de estudantes cadastrados(as).
 - Cadastro de novos(as) professores(as) (cria simultaneamente a conta de acesso e o perfil de autor).
 - Pode editar/excluir qualquer post por meio da API (não há telas dedicadas para isso hoje, ver [Roadmap](#roadmap--melhorias-futuras)).
 
@@ -100,7 +101,8 @@ src/
 │   │   │   ├── route.ts           # GET (lista/busca/filtro, pública) · POST (cria, AUTHOR)
 │   │   │   └── [id]/route.ts      # GET (pública) · PUT · DELETE (ADMIN ou autor dono do post)
 │   │   └── student/
-│   │       └── route.ts           # POST — cadastro público de estudante (já entra)
+│   │       ├── route.ts           # POST — cadastro público de estudante (já entra)
+│   │       └── me/route.ts        # GET · PUT — dados do estudante logado (STUDENT)
 │   │
 │   ├── [post]/                    # Rota dinâmica /:id — detalhe do post (pública)
 │   │   ├── page.tsx
@@ -163,7 +165,7 @@ A aplicação usa autenticação própria (sem provedor externo), baseada em ses
 | --- | --- | --- |
 | `ADMIN` | `/admin`, e qualquer post via API (edição/exclusão) | Único papel que pode cadastrar/editar/desativar/remover professores(as) |
 | `AUTHOR` (professor(a)) | `/area-professor` | Só gerencia (edita/exclui) os próprios posts |
-| `STUDENT` (estudante) | Apenas as páginas públicas | Cria a própria conta em `POST /api/student`. Ainda sem dashboard próprio: funciona como um visitante autenticado e não cria posts (`POST /api/post` responde `403`) |
+| `STUDENT` (estudante) | Apenas as páginas públicas | Cria a própria conta em `POST /api/student` e edita os próprios dados em `PUT /api/student/me`. Ainda sem dashboard próprio: funciona como um visitante autenticado e não cria posts (`POST /api/post` responde `403`) |
 
 ### Proteção de rotas
 
@@ -384,7 +386,7 @@ Exibe o título, o conteúdo completo e o nome do(a) professor(a) responsável p
 
 ### Área administrativa (`/admin`) — requer papel `ADMIN`
 
-Lista todos(as) os(as) professores(as) cadastrados(as) e oferece um botão que abre um modal de cadastro de novo(a) professor(a) (nome e e-mail; a conta nasce com a senha padrão). O cadastro cria, em uma única ação, a conta de acesso (`User` com papel `AUTHOR`) e o perfil de autor (`Author`) vinculado a ela.
+Tem duas abas, cada uma com a quantidade no título. **Professores** lista todos(as) os(as) professores(as) cadastrados(as) e oferece um botão que abre um modal de cadastro de novo(a) professor(a) (nome e e-mail; a conta nasce com a senha padrão). O cadastro cria, em uma única ação, a conta de acesso (`User` com papel `AUTHOR`) e o perfil de autor (`Author`) vinculado a ela. **Estudantes** lista, por nome, os(as) estudantes que criaram conta pelo app (`POST /api/student`), só para consulta.
 
 ### Área do(a) professor(a) (`/area-professor`) — requer papel `AUTHOR`
 
@@ -442,6 +444,8 @@ Uma coleção pronta do Postman, já configurada com Bearer token e com todos os
 | Método | Rota | Auth | Corpo da requisição | Resposta |
 | --- | --- | --- | --- | --- |
 | `POST` | `/api/student` | Pública | `{ "name": string, "email": string, "password": string (mín. 8), "confirmPassword": string }` | `201` — mesmo formato do login (também define o cookie `session`) · `400` validação · `409` e-mail já cadastrado |
+| `GET` | `/api/student/me` | **STUDENT** | — | `200` — `{ name, email }` · `401` sem sessão · `403` não é estudante |
+| `PUT` | `/api/student/me` | **STUDENT** | `{ "name": string, "email": string, "currentPassword"?: string, "password"?: string (mín. 8), "confirmPassword"?: string }` | `200` — `{ user: { id, name, role, authorId: null } }` · `400` validação ou senha atual ausente/incorreta · `401` sem sessão · `403` não é estudante · `409` e-mail já usado |
 
 - Cria a conta `User` (papel `STUDENT`) e o perfil `Student` numa única operação, então não sobra conta sem perfil. Não existe senha padrão nem primeiro acesso: a senha é a que o estudante escolheu.
 - `name`, `email` e as senhas passam por `trim`. Uma senha só de espaços não tem 8 caracteres e responde `400`.
@@ -475,6 +479,32 @@ Uma coleção pronta do Postman, já configurada com Bearer token e com todos os
 
 ```bash
 curl -X POST http://localhost:3000/api/student   -H "Content-Type: application/json"   -d '{"name":"Lia Souza","email":"lia@escola.com","password":"minhasenha123","confirmPassword":"minhasenha123"}'
+```
+
+**Meus dados** (`GET`/`PUT /api/student/me`): tela "Meus dados" do app. As duas rotas exigem o token de um estudante:
+
+- sem sessão (sem token, token inválido/vencido, conta excluída ou desativada): `401` `{ "error": "Você precisa estar logado." }`;
+- sessão de outro papel (professor, admin): `403` `{ "error": "Apenas estudantes têm esta página." }`.
+
+`GET` responde `200` `{ "name": "Lia Souza", "email": "lia@escola.com" }`.
+
+`PUT` sempre recebe `name` e `email`. Para trocar a senha, envie também `password` e `confirmPassword`; sem elas (ou vazias), a senha continua a mesma. As checagens seguem esta ordem:
+
+| # | Situação | Resposta |
+| --- | --- | --- |
+| 1 | Corpo inválido (`name` vazio, `email` inválido, `password` com menos de 8 caracteres, senhas diferentes em `confirmPassword`) | `400` `{ "errors": { ... } }` |
+| 2 | E-mail mudou ou veio senha nova, sem `currentPassword` | `400` `{ "errors": { "currentPassword": ["Informe a senha atual."] } }` |
+| 3 | `currentPassword` errada | `400` `{ "errors": { "currentPassword": ["Senha atual incorreta."] } }` |
+| 4 | E-mail novo já usado por outra conta (inclusive em cadastros simultâneos) | `409` `{ "error": "Já existe uma conta com esse e-mail." }` |
+| 5 | Tudo certo | `200` `{ "user": { "id": "...", "name": "Lia Souza", "role": "STUDENT", "authorId": null } }` |
+
+- Senha atual errada responde **`400`, não `401`**: o app trata `401` como sessão vencida e desloga a pessoa.
+- Só trocar o nome não pede `currentPassword`. O nome é gravado no `User` e no `Student` numa única transação.
+- O token continua valendo depois da edição, mesmo trocando e-mail ou senha: ele guarda só `userId` e `role`. Outras sessões abertas também continuam válidas.
+- A resposta nunca traz hash.
+
+```bash
+curl -X PUT http://localhost:3000/api/student/me   -H "Authorization: Bearer <token>"   -H "Content-Type: application/json"   -d '{"name":"Lia Souza","email":"lia.nova@escola.com","currentPassword":"minhasenha123"}'
 ```
 
 ### Autores — `/api/author`
@@ -602,7 +632,6 @@ A resposta também inclui um header `Set-Cookie: session=...` — reenvie esse c
 - [ ] Telas administrativas para editar/excluir posts de qualquer autor (hoje essa permissão do `ADMIN` só existe via API, sem interface).
 - [ ] Invalidar o cache do TanStack Query ao criar um post (`ModalCreatePost` hoje usa `router.refresh()`, que não atualiza as listas que usam `useQuery`/`useMutation`) — pode exigir um reload manual para o novo post aparecer.
 - [ ] Paginação (ou scroll infinito) na listagem de posts.
-- [ ] Guarda de sessão explícita nas próprias páginas `/admin`/`/area-professor` (hoje dependem só do redirecionamento feito em `src/proxy.ts`).
 - [ ] Unificar a origem do tipo `Post` em `src/services/post.ts` (importado de `generated/prisma/browser`, enquanto o restante do projeto usa `generated/prisma/client`).
 - [ ] Testes automatizados (unitários para Route Handlers e end-to-end para os fluxos de login, criação/edição/exclusão de posts e autores).
 - [ ] Estados de carregamento e de erro explícitos nas páginas/listas que buscam dados assíncronos.
