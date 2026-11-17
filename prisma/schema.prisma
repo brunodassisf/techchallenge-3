@@ -72,6 +72,7 @@ model Student {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   userId    String   @db.ObjectId @unique
+  comments  Comment[]
 }
 
 model Post {
@@ -81,6 +82,20 @@ model Post {
   authors   Author   @relation(fields: [authorId], references: [id])
   authorId  String   @db.ObjectId
   category  Category @default(GERAL)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  comments  Comment[]
+}
+
+// Comentário de um estudante num post. Apagar o post ou o estudante apaga
+// os comentários (o Prisma faz a cascata no MongoDB).
+model Comment {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  text      String
+  post      Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
+  postId    String   @db.ObjectId
+  student   Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  studentId String   @db.ObjectId
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }

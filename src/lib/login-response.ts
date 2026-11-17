@@ -16,8 +16,11 @@ export async function loginSuccessResponse(
 ) {
   const { token, expiresAt } = await createSession(user.id, user.role);
 
-  // Perfil de professor(a) ligado ao usuário; alunos e admin sem perfil não têm.
-  const author = await db.author.findUnique({ where: { userId: user.id } });
+  // Perfis ligados ao usuário: professor(a) tem Author, aluno(a) tem Student.
+  const [author, student] = await Promise.all([
+    db.author.findUnique({ where: { userId: user.id } }),
+    db.student.findUnique({ where: { userId: user.id } }),
+  ]);
 
   return NextResponse.json({
     message: "Login realizado com sucesso!",
@@ -29,6 +32,7 @@ export async function loginSuccessResponse(
       name: user.name,
       role: user.role,
       authorId: author?.id ?? null,
+      studentId: student?.id ?? null,
     },
   }, { status: init?.status });
 }

@@ -81,3 +81,11 @@ export const CreatePostFormSchema = z.object({
     text: z.string().min(1, 'Informe o conteúdo do post.').trim(),
     category: z.enum(Category, 'Categoria inválida.').optional(),
 });
+
+export const CommentFormSchema = z.object({
+    // error: mensagem também quando text não é string (ausente, número...).
+    text: z.string({ error: 'Escreva o comentário.' })
+        .trim()
+        .min(1, 'Escreva o comentário.')
+        .max(1000, 'O comentário pode ter até 1000 caracteres.'),
+});
