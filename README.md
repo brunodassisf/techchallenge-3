@@ -48,6 +48,7 @@ O objetivo é desenvolver uma interface gráfica para a aplicação de blogging 
 - **Login/Cadastro** — modal de login com sessão persistida em cookie.
 - **Cadastro de estudante (API)** — o estudante cria a própria conta em `POST /api/student`, escolhendo a senha, e já sai logado. É usado pelo app mobile; o site não tem tela de cadastro.
 - **Meus dados do estudante (API)** — o estudante logado vê e edita nome, e-mail e senha em `GET`/`PUT /api/student/me` (tela "Meus dados" do app).
+- **Gestão de estudantes pelo admin (API)** — o admin lista, edita nome e e-mail, reseta a senha (volta para a senha padrão com primeiro acesso) e exclui estudantes (aba Estudantes do app).
 
 **Administrador(a) (`ADMIN`)**
 
@@ -102,7 +103,8 @@ src/
 │   │   │   └── [id]/route.ts      # GET (pública) · PUT · DELETE (ADMIN ou autor dono do post)
 │   │   └── student/
 │   │       ├── route.ts           # POST — cadastro público de estudante (já entra)
-│   │       └── me/route.ts        # GET · PUT — dados do estudante logado (STUDENT)
+│   │       ├── me/route.ts        # GET · PUT — dados do estudante logado (STUDENT)
+│   │       └── [id]/              # PUT · DELETE e reset-password/ (POST) — gestão pelo ADMIN
 │   │
 │   ├── [post]/                    # Rota dinâmica /:id — detalhe do post (pública)
 │   │   ├── page.tsx
@@ -165,7 +167,7 @@ A aplicação usa autenticação própria (sem provedor externo), baseada em ses
 | --- | --- | --- |
 | `ADMIN` | `/admin`, e qualquer post via API (edição/exclusão) | Único papel que pode cadastrar/editar/desativar/remover professores(as) |
 | `AUTHOR` (professor(a)) | `/area-professor` | Só gerencia (edita/exclui) os próprios posts |
-| `STUDENT` (estudante) | Apenas as páginas públicas | Cria a própria conta em `POST /api/student` e edita os próprios dados em `PUT /api/student/me`. Ainda sem dashboard próprio: funciona como um visitante autenticado e não cria posts (`POST /api/post` responde `403`) |
+| `STUDENT` (estudante) | Apenas as páginas públicas | Cria a própria conta em `POST /api/student` e edita os próprios dados em `PUT /api/student/me`. O admin lista, edita, reseta a senha e exclui estudantes (`/api/student`, `/api/student/[id]`). Ainda sem dashboard próprio: funciona como um visitante autenticado e não cria posts (`POST /api/post` responde `403`) |
 
 ### Proteção de rotas
 
@@ -446,6 +448,10 @@ Uma coleção pronta do Postman, já configurada com Bearer token e com todos os
 | `POST` | `/api/student` | Pública | `{ "name": string, "email": string, "password": string (mín. 8), "confirmPassword": string }` | `201` — mesmo formato do login (também define o cookie `session`) · `400` validação · `409` e-mail já cadastrado |
 | `GET` | `/api/student/me` | **STUDENT** | — | `200` — `{ name, email }` · `401` sem sessão · `403` não é estudante |
 | `PUT` | `/api/student/me` | **STUDENT** | `{ "name": string, "email": string, "currentPassword"?: string, "password"?: string (mín. 8), "confirmPassword"?: string }` | `200` — `{ user: { id, name, role, authorId: null } }` · `400` validação ou senha atual ausente/incorreta · `401` sem sessão · `403` não é estudante · `409` e-mail já usado |
+| `GET` | `/api/student` | **ADMIN** | — | `200` — `[{ id, name, email, createdAt }]` por nome · `401` sem sessão · `403` não é admin |
+| `PUT` | `/api/student/[id]` | **ADMIN** | `{ "name": string, "email": string }` | `200` — `{ data: { id, name, email, createdAt } }` · `400` validação · `401` · `403` · `404` · `409` e-mail já usado |
+| `DELETE` | `/api/student/[id]` | **ADMIN** | — | `200` — `{ message }` (apaga `Student` e `User`) · `401` · `403` · `404` |
+| `POST` | `/api/student/[id]/reset-password` | **ADMIN** | — | `200` — `{ message }` (senha padrão + primeiro acesso) · `401` · `403` · `404` · `500` senha padrão não configurada |
 
 - Cria a conta `User` (papel `STUDENT`) e o perfil `Student` numa única operação, então não sobra conta sem perfil. Não existe senha padrão nem primeiro acesso: a senha é a que o estudante escolheu.
 - `name`, `email` e as senhas passam por `trim`. Uma senha só de espaços não tem 8 caracteres e responde `400`.
@@ -505,6 +511,22 @@ curl -X POST http://localhost:3000/api/student   -H "Content-Type: application/j
 
 ```bash
 curl -X PUT http://localhost:3000/api/student/me   -H "Authorization: Bearer <token>"   -H "Content-Type: application/json"   -d '{"name":"Lia Souza","email":"lia.nova@escola.com","currentPassword":"minhasenha123"}'
+```
+
+**Gestão pelo admin** (`GET /api/student`, `PUT`/`DELETE /api/student/[id]`, `POST /api/student/[id]/reset-password`): aba Estudantes do app. Todas exigem token de **ADMIN**:
+
+- sem sessão: `401` `{ "error": "Você precisa estar logado." }`;
+- outro papel: `403` `{ "error": "Apenas administradores podem gerenciar estudantes." }` (na listagem: `"Apenas administradores podem ver os estudantes."`);
+- `id` que não é ObjectId ou estudante inexistente: `404` `{ "error": "Estudante não encontrado." }`.
+
+O `id` é o do `Student`, o mesmo que vem na listagem.
+
+- **Editar** troca nome e e-mail (`User` e `Student` numa transação) e **não mexe na senha**. Repetir o e-mail atual não dá `409`.
+- **Resetar senha** grava o hash de `DEFAULT_TEACHER_PASSWORD` e marca `firstAccess: true`: no próximo login o estudante recebe `403` `FIRST_ACCESS_REQUIRED` e cria outra senha, como o professor novo. Uma sessão já aberta continua valendo até vencer.
+- **Excluir** apaga o `Student` e o `User` numa transação: a pessoa não entra mais.
+
+```bash
+curl -X PUT http://localhost:3000/api/student/<id>   -H "Authorization: Bearer <token-admin>"   -H "Content-Type: application/json"   -d '{"name":"Lia Souza","email":"lia@escola.com"}'
 ```
 
 ### Autores — `/api/author`
