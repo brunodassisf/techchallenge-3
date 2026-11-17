@@ -55,6 +55,27 @@ export const StudentSignUpFormSchema = z.object({
     path: ['confirmPassword'],
 });
 
+// Senha nova é opcional: só é validada se `password` ou `confirmPassword`
+// vier com texto (depois do trim).
+export const StudentProfileFormSchema = z.object({
+    name: z.string().trim().min(1, 'Informe o nome.'),
+    email: z.email('Informe um e-mail válido.').trim(),
+    currentPassword: z.string().optional(),
+    password: z.string().trim().optional(),
+    confirmPassword: z.string().trim().optional(),
+}).superRefine((data, ctx) => {
+    const password = data.password ?? '';
+    const confirmPassword = data.confirmPassword ?? '';
+    if (!password && !confirmPassword) return;
+
+    if (password.length < 8) {
+        ctx.addIssue({ code: 'custom', message: 'A senha deve ter pelo menos 8 caracteres.', path: ['password'] });
+    }
+    if (password !== confirmPassword) {
+        ctx.addIssue({ code: 'custom', message: 'As senhas não coincidem.', path: ['confirmPassword'] });
+    }
+});
+
 export const CreatePostFormSchema = z.object({
     title: z.string().min(1, 'Informe o título.').trim(),
     text: z.string().min(1, 'Informe o conteúdo do post.').trim(),
