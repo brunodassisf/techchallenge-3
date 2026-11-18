@@ -45,7 +45,7 @@ Estes ajustes deixaram a API pronta para o app mobile:
 - **Desativar professor.** O admin pode tirar o acesso sem apagar os posts.
 - **Remover professor com posts é bloqueado.** A API responde `409` e sugere desativar.
 - **Cadastro de estudante.** Rota pública. O estudante escolhe a senha e já sai logado.
-- **Meus dados.** O estudante edita nome, e-mail e senha.
+- **Meus dados.** Estudante e professor editam nome, e-mail e senha.
 - **Gestão de estudantes.** O admin lista, edita, reseta a senha e exclui.
 - **Comentários.** Estudante comenta. Dono edita. Dono, professor do post ou admin apaga.
 - **Admin criado sozinho.** Ao subir, a API cria o admin do `.env` se o banco não tiver nenhum.
@@ -193,6 +193,8 @@ Cada comentário vem com `student: { id, name }`. O e-mail do estudante não apa
 | `PUT /api/author/:id` | 🔑 admin | `name` | `200` · `400` · `401` · `403` · `404` |
 | `PATCH /api/author/:id/status` | 🔑 admin | `{ "active": true }` ou `false` | `200` · `400` · `401` · `403` · `404` · `409` sem conta de login |
 | `DELETE /api/author/:id` | 🔑 admin | — | `200` · `401` · `403` · `404` · `409` tem posts |
+| `GET /api/author/me` | 🔑 professor | — | `200` `{ name, email }` · `401` · `403` |
+| `PUT /api/author/me` | 🔑 professor | igual a `PUT /api/student/me` | `200` (com `authorId`) · `400` · `401` · `403` · `409` |
 
 - Professor novo nasce com a senha padrão e precisa do primeiro acesso.
 - Desativar mantém os posts no ar, com o nome dele. Repetir a ação não dá erro.
