@@ -198,6 +198,7 @@ Cada comentário vem com `student: { id, name }`. O e-mail do estudante não apa
 
 - Professor novo nasce com a senha padrão e precisa do primeiro acesso.
 - Desativar mantém os posts no ar, com o nome dele. Repetir a ação não dá erro.
+- Em "Meus dados" (`/api/author/me`), o professor segue as mesmas regras do estudante. Trocar o nome muda também o autor dos posts.
 - Remover só funciona sem posts. Aí a conta de login some junto.
 
 ### Estudantes: `/api/student`
