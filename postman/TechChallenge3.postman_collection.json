@@ -48,6 +48,10 @@
       "value": ""
     },
     {
+      "key": "authorName",
+      "value": ""
+    },
+    {
       "key": "postId",
       "value": ""
     },
@@ -819,6 +823,437 @@
                 }
               ],
               "body": "{\n  \"message\": \"Login realizado com sucesso!\",\n  \"token\": \"eyJhbGciOiJIUzI1NiJ9...\",\n  \"tokenType\": \"Bearer\",\n  \"expiresAt\": \"2026-11-09T12:00:00.000Z\",\n  \"user\": {\n    \"id\": \"6650f1c2a1b2c3d4e5f60718\",\n    \"name\": \"Ana Silva\",\n    \"role\": \"AUTHOR\",\n    \"authorId\": \"6650f1c2a1b2c3d4e5f60719\"\n  }\n}"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "3.1 Meus dados (professor)",
+      "description": "Tela \"Meus dados\" do app para o professor (`GET`/`PUT /api/author/me`), com o `{{token}}` salvo por *Login (professor)*. As regras do `PUT` são as mesmas de `/api/student/me`. Não troca e-mail nem senha, para não quebrar as pastas seguintes.",
+      "item": [
+        {
+          "name": "Meus dados do professor sem token (401)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/author/me",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "author",
+                "me"
+              ]
+            },
+            "description": "Sem `Authorization`. Responde `401`.",
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "protocolProfileBehavior": {
+            "disableCookies": true
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 401\", () => pm.response.to.have.status(401));",
+                  "pm.test(\"Mensagem de login\", () => pm.expect(pm.response.json().error).to.eql(\"Você precisa estar logado.\"));"
+                ]
+              }
+            }
+          ],
+          "response": [
+            {
+              "name": "401 — sem token",
+              "originalRequest": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/api/author/me",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "author",
+                    "me"
+                  ]
+                }
+              },
+              "status": "Unauthorized",
+              "code": 401,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"error\": \"Você precisa estar logado.\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "Meus dados (professor)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/author/me",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "author",
+                "me"
+              ]
+            },
+            "description": "Requer token de **AUTHOR** (`{{token}}`). Devolve só `name` e `email` e salva o nome em `authorName`.\n\nRespostas: `200` · `401` sem sessão · `403` não é professor.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "protocolProfileBehavior": {
+            "disableCookies": true
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test(\"Só name e email\", () => pm.expect(body).to.have.all.keys(\"name\", \"email\"));",
+                  "pm.test(\"E-mail do professor cadastrado\", () => pm.expect(body.email).to.eql(pm.collectionVariables.get(\"authorEmail\")));",
+                  "pm.collectionVariables.set(\"authorName\", body.name);"
+                ]
+              }
+            }
+          ],
+          "response": [
+            {
+              "name": "200 — meus dados",
+              "originalRequest": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/api/author/me",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "author",
+                    "me"
+                  ]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"name\": \"Ana Silva\",\n  \"email\": \"professor.1763000000000@techchallenge.com\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "Editar meus dados (professor)",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/author/me",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "author",
+                "me"
+              ]
+            },
+            "description": "Salva o mesmo nome e e-mail, sem senha: não pede `currentPassword`. A resposta traz `authorId`, que o app usa para saber quais posts são do professor.\n\nRespostas: `200` · `400` · `401` · `403` · `409` e-mail já usado.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"{{authorName}}\",\n  \"email\": \"{{authorEmail}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "protocolProfileBehavior": {
+            "disableCookies": true
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+                  "const user = pm.response.json().user;",
+                  "pm.test(\"Papel AUTHOR\", () => pm.expect(user.role).to.eql(\"AUTHOR\"));",
+                  "pm.test(\"authorId do professor\", () => pm.expect(user.authorId).to.eql(pm.collectionVariables.get(\"authorId\")));",
+                  "pm.test(\"Nome salvo\", () => pm.expect(user.name).to.eql(pm.collectionVariables.get(\"authorName\")));"
+                ]
+              }
+            }
+          ],
+          "response": [
+            {
+              "name": "200 — dados salvos",
+              "originalRequest": {
+                "method": "PUT",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/author/me",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "author",
+                    "me"
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"name\": \"{{authorName}}\",\n  \"email\": \"{{authorEmail}}\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"user\": {\n    \"id\": \"6650f0c2a1b2c3d4e5f60718\",\n    \"name\": \"Ana Silva\",\n    \"role\": \"AUTHOR\",\n    \"authorId\": \"6650f0c2a1b2c3d4e5f60719\"\n  }\n}"
+            }
+          ]
+        },
+        {
+          "name": "Professor troca e-mail sem senha atual (400)",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/author/me",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "author",
+                "me"
+              ]
+            },
+            "description": "Trocar e-mail exige `currentPassword`. Responde `400` no campo, não `401`.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"{{authorName}}\",\n  \"email\": \"novo.{{authorEmail}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "protocolProfileBehavior": {
+            "disableCookies": true
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 400\", () => pm.response.to.have.status(400));",
+                  "pm.test(\"Erro em currentPassword\", () => pm.expect(pm.response.json().errors.currentPassword).to.eql([\"Informe a senha atual.\"]));"
+                ]
+              }
+            }
+          ],
+          "response": [
+            {
+              "name": "400 — sem senha atual",
+              "originalRequest": {
+                "method": "PUT",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/api/author/me",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "author",
+                    "me"
+                  ]
+                }
+              },
+              "status": "Bad Request",
+              "code": 400,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"errors\": {\n    \"currentPassword\": [\"Informe a senha atual.\"]\n  }\n}"
+            }
+          ]
+        },
+        {
+          "name": "Professor com senha atual incorreta (400)",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/author/me",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "author",
+                "me"
+              ]
+            },
+            "description": "`currentPassword` errada. Responde `400`, não `401`, para o app não deslogar a pessoa.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"{{authorName}}\",\n  \"email\": \"novo.{{authorEmail}}\",\n  \"currentPassword\": \"senhaErrada123\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "protocolProfileBehavior": {
+            "disableCookies": true
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 400\", () => pm.response.to.have.status(400));",
+                  "pm.test(\"Erro em currentPassword\", () => pm.expect(pm.response.json().errors.currentPassword).to.eql([\"Senha atual incorreta.\"]));"
+                ]
+              }
+            }
+          ],
+          "response": [
+            {
+              "name": "400 — senha atual incorreta",
+              "originalRequest": {
+                "method": "PUT",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/api/author/me",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "author",
+                    "me"
+                  ]
+                }
+              },
+              "status": "Bad Request",
+              "code": 400,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"errors\": {\n    \"currentPassword\": [\"Senha atual incorreta.\"]\n  }\n}"
             }
           ]
         }
@@ -2971,6 +3406,80 @@
                 }
               ],
               "body": "{\n  \"name\": \"Lia Souza\",\n  \"email\": \"estudante.1763000000000@techchallenge.com\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "Meus dados do professor com token de estudante (403)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/author/me",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "author",
+                "me"
+              ]
+            },
+            "description": "`/api/author/me` é só para **AUTHOR**. Estudante recebe `403`.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{studentToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "protocolProfileBehavior": {
+            "disableCookies": true
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 403\", () => pm.response.to.have.status(403));",
+                  "pm.test(\"Mensagem de papel\", () => pm.expect(pm.response.json().error).to.eql(\"Apenas professores têm esta página.\"));"
+                ]
+              }
+            }
+          ],
+          "response": [
+            {
+              "name": "403 — não é professor",
+              "originalRequest": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/api/author/me",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "author",
+                    "me"
+                  ]
+                }
+              },
+              "status": "Forbidden",
+              "code": 403,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"error\": \"Apenas professores têm esta página.\"\n}"
             }
           ]
         },
