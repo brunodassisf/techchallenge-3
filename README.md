@@ -1,4 +1,4 @@
-# Tech Challenge 3 — Blog Acadêmico
+# Tech Challenge 3: Blog Acadêmico
 
 [![Next.js](https://img.shields.io/badge/Next.js-16.3-black?logo=next.js)](https://nextjs.org)
 [![React](https://img.shields.io/badge/React-19.2-149ECA?logo=react)](https://react.dev)
@@ -8,630 +8,116 @@
 [![MongoDB](https://img.shields.io/badge/MongoDB-Database-47A248?logo=mongodb)](https://www.mongodb.com)
 [![CI](https://github.com/brunodassisf/techchallenge-3/actions/workflows/ci.yml/badge.svg)](https://github.com/brunodassisf/techchallenge-3/actions/workflows/ci.yml)
 
-Plataforma de blogging acadêmico full-stack construída em Next.js. Possui autenticação própria com três papéis de usuário (administrador, professor(a) e estudante), área administrativa para cadastro de professores(as), área do(a) professor(a) para publicar e gerenciar seus próprios posts, e uma página inicial pública onde qualquer visitante pode navegar, pesquisar e ler os posts.
+Blog de escola feito em Next.js. Professores publicam posts. Estudantes leem e comentam. O admin cuida das contas.
+
+O mesmo projeto tem o site e a API REST (`/api`). A API também atende o app mobile do Tech Challenge 4.
 
 ## Sumário
 
-- [Sobre o projeto](#sobre-o-projeto)
-- [Objetivo](#objetivo)
-- [Funcionalidades](#funcionalidades)
-- [Arquitetura e estrutura de pastas](#arquitetura-e-estrutura-de-pastas)
-- [Autenticação e autorização](#autenticação-e-autorização)
-- [Modelo de dados](#modelo-de-dados)
-- [Dependências principais](#dependências-principais)
-- [Como instalar e rodar](#como-instalar-e-rodar)
-- [Docker](#docker)
-- [Integração contínua (GitHub Actions)](#integração-contínua-github-actions)
-- [Telas](#telas)
-- [Endpoints (API Reference)](#endpoints-api-reference)
-- [Roadmap / Melhorias futuras](#roadmap--melhorias-futuras)
+- [Quem faz o quê](#quem-faz-o-quê)
+- [O que mudou na API](#o-que-mudou-na-api)
+- [Como rodar](#como-rodar)
+- [Como funciona o login](#como-funciona-o-login)
+- [Rotas da API](#rotas-da-api)
+- [Banco de dados](#banco-de-dados)
+- [Estrutura de pastas](#estrutura-de-pastas)
+- [Telas do site](#telas-do-site)
+- [CI](#ci)
+- [Próximos passos](#próximos-passos)
 
-## Sobre o projeto
+## Quem faz o quê
 
-Este repositório entrega tanto o back-end quanto o front-end da aplicação de blogging: modelo de dados, API REST, autenticação/sessão e a interface gráfica em React (via Next.js App Router), com Chakra UI para os componentes visuais, MongoDB (via Prisma) como banco de dados e uma sessão própria baseada em JWT (sem depender de um provedor externo de autenticação). O front-end não acessa o Prisma diretamente para servir as páginas: toda leitura e escrita de dados passa pelos mesmos Route Handlers REST expostos em `/api`, seja a partir de Server Components (via Server Actions) ou de Client Components (via `fetch` + TanStack Query).
-
-## Objetivo
-
-> Chegou a hora de criarmos uma interface gráfica robusta, intuitiva e eficiente para esta aplicação. Este desafio focará em desenvolver o front-end, proporcionando uma experiência de usuário excelente tanto para professores(as) quanto para estudantes.
-
-O objetivo é desenvolver uma interface gráfica para a aplicação de blogging utilizando React. A aplicação deve ser responsiva, acessível e fácil de usar, permitindo aos(às) docentes e estudantes interagir com os diversos endpoints REST implementados no back-end — agora com autenticação e autorização por papel, para que cada tipo de usuário(a) tenha acesso apenas às ações que lhe cabem (visitante/estudante consulta conteúdo, professor(a) publica e gerencia seus posts, administrador(a) cadastra professores(as)).
-
-## Funcionalidades
-
-**Público (sem login)**
-
-- **Listagem de posts** — todos os posts cadastrados, exibindo título e um resumo do conteúdo.
-- **Filtro por professor(a)** — seletor com a lista de autores(as) para restringir os posts exibidos a um único professor.
-- **Busca por palavra-chave** — campo de texto que filtra posts pelo título, pelo corpo do texto ou pelo nome do(a) professor(a) (os dois filtros combinam entre si).
-- **Detalhe do post** — página dedicada com o conteúdo completo e o nome do(a) professor(a) responsável.
-- **Tema claro/escuro** — alternância de tema persistida entre sessões, com suporte à preferência do sistema operacional.
-- **Login/Cadastro** — modal de login com sessão persistida em cookie.
-- **Cadastro de estudante (API)** — o estudante cria a própria conta em `POST /api/student`, escolhendo a senha, e já sai logado. É usado pelo app mobile; o site não tem tela de cadastro.
-- **Meus dados do estudante (API)** — o estudante logado vê e edita nome, e-mail e senha em `GET`/`PUT /api/student/me` (tela "Meus dados" do app).
-- **Gestão de estudantes pelo admin (API)** — o admin lista, edita nome e e-mail, reseta a senha (volta para a senha padrão com primeiro acesso) e exclui estudantes (aba Estudantes do app).
-
-**Administrador(a) (`ADMIN`)**
-
-- Acesso à área `/admin`, com abas de professores(as) e de estudantes cadastrados(as).
-- Cadastro de novos(as) professores(as) (cria simultaneamente a conta de acesso e o perfil de autor).
-- Pode editar/excluir qualquer post por meio da API (não há telas dedicadas para isso hoje, ver [Roadmap](#roadmap--melhorias-futuras)).
-
-**Professor(a) (`AUTHOR`)**
-
-- Acesso à área `/area-professor`, com criação de novos posts.
-- Listagem apenas dos próprios posts, com edição e exclusão.
-
-## Arquitetura e estrutura de pastas
-
-A aplicação usa o **App Router** do Next.js 16. Toda a busca e a alteração de dados — tanto para renderizar páginas quanto para as interações do usuário — passam pelos **Route Handlers** em `src/app/api`, nunca diretamente pelo Prisma a partir da camada de apresentação (com uma única exceção pontual, apontada abaixo). Existem duas formas de chegar até essa API, dependendo de onde o dado é necessário:
-
-```
-src/
-├── actions/             # Server Actions — leitura de dados para Server Components
-│   ├── author.ts        #   getAuthor() → serverFetch('/api/author')
-│   └── post.ts          #   getAllPosts(), getPostId() → serverFetch('/api/post[/:id]')
-│
-├── services/            # Wrappers de fetch usados por Client Components (react-query)
-│   ├── author.ts        #   getAuthors()
-│   ├── post.ts          #   getPosts(authorId, search), getPostsByAuthorId(authorId)
-│   └── auth.ts          #   (reservado, ainda não implementado)
-│
-├── lib/
-│   ├── prisma.ts        # Instância única do PrismaClient
-│   ├── session.ts       # JWT da sessão (jose): encrypt/decrypt, createSession, updateSession, deleteSession
-│   ├── dal.ts            # Data Access Layer: verifySession() e getSession()
-│   ├── api.ts            # serverFetch() — fetch server-side para a própria API, repassando cookies
-│   ├── client-auth.ts    # logout(router) — fetch client-side de logout + navegação
-│   └── definition.ts      # Schemas Zod (login, criar autor, criar post) e tipos compartilhados
-│
-├── hook/
-│   └── usePasswordVisibility.tsx  # Hook do botão de mostrar/ocultar senha
-│
-├── proxy.ts             # Middleware (Next 16) — protege /admin e /area-professor por papel
-│
-├── app/
-│   ├── api/                       # API REST (Route Handlers)
-│   │   ├── auth/
-│   │   │   ├── login/route.ts     # POST — autentica e cria a sessão
-│   │   │   ├── first-access/route.ts # POST — troca a senha padrão e entra
-│   │   │   └── logout/route.ts    # POST — encerra a sessão
-│   │   ├── author/
-│   │   │   ├── route.ts           # GET (lista, pública) · POST (cria, ADMIN)
-│   │   │   └── [id]/route.ts      # GET (pública) · PUT · DELETE (ADMIN)
-│   │   ├── post/
-│   │   │   ├── route.ts           # GET (lista/busca/filtro, pública) · POST (cria, AUTHOR)
-│   │   │   └── [id]/route.ts      # GET (pública) · PUT · DELETE (ADMIN ou autor dono do post)
-│   │   └── student/
-│   │       ├── route.ts           # POST — cadastro público (já entra) · GET — lista (ADMIN)
-│   │       ├── me/route.ts        # GET · PUT — dados do estudante logado (STUDENT)
-│   │       └── [id]/              # PUT · DELETE e reset-password/ (POST) — gestão pelo ADMIN
-│   │
-│   ├── [post]/                    # Rota dinâmica /:id — detalhe do post (pública)
-│   │   ├── page.tsx
-│   │   └── ui/ViewPost.tsx
-│   │
-│   ├── admin/                     # Área do administrador (protegida por role ADMIN)
-│   │   ├── page.tsx
-│   │   └── ui/ListAuthor.tsx, ModalCreateAuthor.tsx
-│   │
-│   ├── area-professor/            # Área do professor (protegida por role AUTHOR)
-│   │   ├── page.tsx
-│   │   └── ui/ListPostsAuthor.tsx, ModalCreatePost.tsx, ModalEditPost.tsx
-│   │
-│   ├── ui/                        # Componentes da página inicial e do cabeçalho
-│   │   ├── ListPost.tsx           # Lista + filtro por autor + busca por palavra-chave
-│   │   ├── TitlePage.tsx          # Cabeçalho (Server Component) — lê a sessão
-│   │   ├── UserMenu.tsx / Sidebar.tsx  # Menu do usuário logado (desktop/mobile)
-│   │   └── ModalLogin.tsx
-│   │
-│   ├── layout.tsx       # Layout raiz (fonte, Provider de tema/UI/react-query, Toaster)
-│   └── page.tsx         # Página inicial (/) — lista de posts
-│
-└── components/ui/       # Snippets do Chakra UI (provider, color-mode, tooltip, toaster)
-
-prisma/
-└── schema.prisma        # Modelos User, Author, Student, Post, Comment (MongoDB)
-```
-
-Fluxo de dados:
-
-```
-Página (Server Component)  →  Server Action (src/actions, via serverFetch)  →  Route Handler (/api)  →  Prisma  →  MongoDB
-Componente interativo (Client)  →  fetch (src/services, useQuery/useMutation)  →  Route Handler (/api)  →  Prisma  →  MongoDB
-```
-
-`serverFetch` (`src/lib/api.ts`) existe porque, do lado do servidor, o Next não resolve caminhos relativos e não repassa automaticamente os cookies da requisição original — a função monta a URL absoluta a partir do header `host` e repassa manualmente o cookie de sessão. Os serviços client-side (`src/services/*`), por rodarem no navegador, usam `fetch` com caminho relativo normalmente.
-
-> **Nota:** a única exceção a esse padrão é `src/app/area-professor/page.tsx`, que resolve o `authorId` da sessão atual com uma consulta Prisma direta (`db.author.findUnique(...)`) em vez de passar por um endpoint — um atalho pontual, não a convenção do projeto.
-
-## Autenticação e autorização
-
-A aplicação usa autenticação própria (sem provedor externo), baseada em sessão assinada:
-
-- **Login** (`POST /api/auth/login`) valida e-mail/senha, compara a senha com o hash salvo (`bcryptjs`) e, se válido, assina um JWT (HS256, biblioteca `jose`, segredo em `SESSION_SECRET`) contendo `{ userId, role, expiresAt }`. O token é gravado em um cookie `session` (`httpOnly`, `sameSite=lax`, expira em 7 dias) **e** devolvido no corpo da resposta (`token`), para uso por clientes externos.
-- **Logout** (`POST /api/auth/logout`) apenas remove o cookie `session`. Para quem usa Bearer token, o JWT é *stateless*: basta descartá-lo no cliente (ele expira sozinho em 7 dias).
-- **Duas formas de enviar o token** em rotas autenticadas — o servidor aceita qualquer uma (o header tem prioridade):
-  - **Cookie `session`** — usado automaticamente pelo front-end Next (navegador).
-  - **Header `Authorization: Bearer <token>`** — para clientes fora da aplicação Next: Postman, apps mobile, outros serviços.
-- `src/lib/dal.ts` expõe duas formas de ler a sessão atual:
-  - `verifySession()` — decodifica o JWT (do header `Authorization` ou do cookie) e devolve só o payload assinado (`userId`, `role`, `expiresAt`), sem consultar o banco.
-  - `getSession()` — decodifica o JWT (header ou cookie) e busca o registro `User` completo no banco (usado por toda a API e pelas páginas que precisam do usuário logado). Se a conta estiver **desativada** (`User.deactivatedAt` preenchido), devolve `null`: tokens e cookies já emitidos deixam de valer na hora, as rotas protegidas respondem `401` e o site trata a pessoa como deslogada.
-- **Primeiro acesso:** o professor cadastrado pelo ADMIN nasce com a senha padrão (`DEFAULT_TEACHER_PASSWORD`) e `User.firstAccess: true`. Enquanto isso, o login responde `403` com `code: "FIRST_ACCESS_REQUIRED"` e **não** cria sessão, então a conta com senha padrão não acessa nenhuma rota protegida. O professor define a própria senha em `POST /api/auth/first-access`, que já devolve a mesma resposta do login. Contas antigas, sem o campo, entram normalmente. O site não tem tela de primeiro acesso: ele só mostra a mensagem, e a senha é definida pelo app.
-- **Cadastro de estudante:** `POST /api/student` é público. O estudante escolhe a própria senha (sem senha padrão e sem primeiro acesso), e a conta `User` (papel `STUDENT`) e o perfil `Student` são criados juntos, numa única operação. A resposta é a mesma do login, com status `201`, então o app já entra.
-- **Conta desativada:** o ADMIN pode desativar/reativar professores (`PATCH /api/author/:id/status`). O login de uma conta desativada responde `403` `{ "error": "Conta desativada. Fale com a coordenação." }` e não cria sessão. Essa checagem acontece só depois de conferir a senha, para não revelar se o e-mail existe. Os posts do professor desativado continuam publicados com o nome dele.
-
-### Papéis (`Role`)
-
-| Papel | Pode acessar | Observações |
-| --- | --- | --- |
-| `ADMIN` | `/admin`, e qualquer post via API (edição/exclusão) | Único papel que pode cadastrar/editar/desativar/remover professores(as) |
-| `AUTHOR` (professor(a)) | `/area-professor` | Só gerencia (edita/exclui) os próprios posts |
-| `STUDENT` (estudante) | Apenas as páginas públicas | Cria a própria conta em `POST /api/student` e edita os próprios dados em `PUT /api/student/me`. O admin lista, edita, reseta a senha e exclui estudantes (`/api/student`, `/api/student/[id]`). Ainda sem dashboard próprio: funciona como um visitante autenticado e não cria posts (`POST /api/post` responde `403`) |
-
-### Proteção de rotas
-
-- **Páginas**: `src/proxy.ts` (o `middleware.ts` do Next 16) intercepta a navegação (exceto `/api`, arquivos estáticos e `favicon.ico`) e redireciona para `/` sempre que o papel da sessão não corresponder ao exigido pela rota: `/admin` exige `ADMIN`, `/area-professor` exige `AUTHOR`. A rota `/` é pública para todos os papéis, inclusive visitantes sem sessão.
-- **API**: o `proxy.ts` **não** protege `/api/**`. Cada Route Handler faz sua própria checagem chamando `getSession()` e validando papel/posse do recurso — por isso a tabela de endpoints abaixo detalha a regra de autorização rota a rota.
-
-> O modelo `Student` é criado no cadastro de estudante (`POST /api/student`), ligado ao `User` por `userId`. `User.origemId` existe no schema do Prisma, mas não tem uso funcional no código hoje.
-
-## Modelo de dados
-
-```prisma
-enum Role {
-  ADMIN
-  AUTHOR
-  STUDENT
-}
-
-model User {
-  id        String   @id @default(auto()) @map("_id") @db.ObjectId
-  name      String
-  email     String   @unique
-  hash      String
-  role      Role
-  origemId  String?  @db.ObjectId
-  deactivatedAt DateTime? // preenchido = conta desativada pelo ADMIN
-  firstAccess Boolean?    // true = ainda precisa criar a própria senha
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  authors   Author?
-  students  Student?
-}
-
-model Author {
-  id        String   @id @default(auto()) @map("_id") @db.ObjectId
-  name      String
-  posts     Post[]
-  user      User?    @relation(fields: [userId], references: [id])
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  userId    String?  @unique @db.ObjectId
-}
-
-model Student {
-  id        String   @id @default(auto()) @map("_id") @db.ObjectId
-  name      String
-  user      User     @relation(fields: [userId], references: [id])
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  userId    String   @db.ObjectId @unique
-  comments  Comment[]
-}
-
-model Post {
-  id        String   @id @default(auto()) @map("_id") @db.ObjectId
-  title     String
-  text      String
-  authors   Author   @relation(fields: [authorId], references: [id])
-  authorId  String   @db.ObjectId
-  category  Category @default(GERAL)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  comments  Comment[]
-}
-
-model Comment {
-  id        String   @id @default(auto()) @map("_id") @db.ObjectId
-  text      String
-  post      Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
-  postId    String   @db.ObjectId
-  student   Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
-  studentId String   @db.ObjectId
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-}
-
-enum Category {
-  MATEMATICA
-  PORTUGUES
-  CIENCIAS
-  HISTORIA
-  GEOGRAFIA
-  INGLES
-  ARTES
-  EDUCACAO_FISICA
-  GERAL
-}
-```
-
-- `User` é o registro base de autenticação (e-mail, hash de senha e `role`) e pode ter, no máximo, um perfil `Author` **e/ou** um `Student` associado (relações 1:1 via `userId` único no lado filho).
-- `Author` representa o perfil de professor(a); é criado junto com o `User` (`role: AUTHOR`) quando um(a) administrador(a) cadastra um(a) novo(a) professor(a).
-- `Post` pertence a exatamente um `Author` (`authorId`); um `Author` pode ter vários posts. Não existe relação direta entre `Post` e `User`/`Student` — a posse de um post é sempre resolvida via `Author.userId === session.id`.
-- O campo de relação em `Post` chama-se `authors` mas é **singular** (um único autor por post) — o nome no plural é só uma convenção de nomenclatura do schema, não indica um array.
-- `Comment` pertence a um `Post` e a um `Student`. Apagar o post ou o estudante apaga os comentários dele (`onDelete: Cascade`).
-- `User.origemId` está modelado, mas nenhuma rota ou tela usa.
-
-## Dependências principais
-
-| Pacote | Versão | Uso no projeto |
-| --- | --- | --- |
-| [next](https://nextjs.org) | 16.3.4 | Framework — App Router, Route Handlers, `proxy.ts` (middleware) |
-| [react](https://react.dev) / react-dom | 19.2.8 | Biblioteca de UI |
-| [typescript](https://www.typescriptlang.org) | ^5 | Tipagem estática |
-| [prisma](https://www.prisma.io) / @prisma/client | 6.19 | ORM e cliente de acesso ao MongoDB |
-| [@tanstack/react-query](https://tanstack.com/query) | ^5.102.8 | Cache e sincronização de dados no cliente (`useQuery`/`useMutation`) |
-| [@chakra-ui/react](https://chakra-ui.com) | ^3.37.0 | Biblioteca de componentes de UI |
-| [@emotion/react](https://emotion.sh) | ^11.14.0 | Motor de estilos (CSS-in-JS) usado internamente pelo Chakra UI |
-| [jose](https://github.com/panva/jose) | ^6.2.12 | Assinatura/verificação do JWT de sessão |
-| [bcryptjs](https://github.com/dcodeIO/bcrypt.js) | ^3.0.3 | Hash de senhas |
-| [zod](https://zod.dev) | — (transitiva) | Validação dos dados de formulário/API (`src/lib/definition.ts`); não está listada diretamente em `package.json`, apenas resolvida como dependência transitiva |
-| [next-themes](https://github.com/pacocoursey/next-themes) | ^0.4.6 | Alternância e persistência do tema claro/escuro |
-| [react-icons](https://react-icons.github.io/react-icons) | ^5.7.0 | Ícones usados na interface |
-| [@react-icons/all-files](https://www.npmjs.com/package/@react-icons/all-files) | ^4.1.0 | Conjunto adicional de ícones |
-| [dotenv](https://github.com/motdotla/dotenv) | ^17.4.2 | Carregamento de variáveis de ambiente |
-| [eslint](https://eslint.org) / eslint-config-next | ^9 / 16.3.4 | Padronização e lint do código |
-| [babel-plugin-react-compiler](https://react.dev/learn/react-compiler) | 1.0.0 | React Compiler, habilitado em `next.config.ts` |
-
-## Como instalar e rodar
-
-**Pré-requisitos**
-
-- [Node.js](https://nodejs.org) 20 ou superior
-- Uma instância do MongoDB acessível (local ou [Atlas](https://www.mongodb.com/atlas)) — o repositório inclui um `docker-compose.yml` para levantar um MongoDB local (com replica set já configurado, exigido pelo Prisma para transações) e o [Docker](https://www.docker.com/) para usá-lo
-
-**Passo a passo**
-
-```bash
-# 1. Clonar o repositório
-git clone <url-do-repositorio>
-cd techchallenge-3
-
-# 2. Instalar as dependências
-npm install
-```
-
-Crie um arquivo `.env` na raiz do projeto com as variáveis abaixo (sem elas a aplicação não sobe: a ausência de `SESSION_SECRET`, por exemplo, impede a criação de qualquer sessão):
-
-| Variável | Descrição |
+| Papel | O que pode fazer |
 | --- | --- |
-| `DATABASE_URL` | Connection string do MongoDB usada pelo Prisma |
-| `SESSION_SECRET` | Segredo usado para assinar/verificar o JWT da sessão (string longa e aleatória) |
-| `ADMIN_EMAIL` | E-mail do usuário administrador criado ao subir a API, se o banco não tiver nenhum `ADMIN` |
-| `ADMIN_PASSWORD` | Senha (em texto puro) do usuário administrador — é hasheada na criação |
-| `ADMIN_NAME` | Nome de exibição do usuário administrador |
-| `DEFAULT_TEACHER_PASSWORD` | Senha padrão dos professores recém-cadastrados (mínimo de 8 caracteres), trocada por eles no primeiro acesso. Sem ela, `POST /api/author` responde `500`, e o `docker compose` não sobe (o Compose exige a variável) |
+| Visitante | Ler, buscar e filtrar posts. |
+| `STUDENT` (estudante) | Tudo do visitante. Criar a própria conta, editar os próprios dados e comentar posts. |
+| `AUTHOR` (professor) | Criar posts e editar ou excluir só os seus. Apagar comentários nos seus posts. |
+| `ADMIN` | Cadastrar, editar, desativar e remover professores. Gerenciar estudantes. Editar ou excluir qualquer post. Apagar qualquer comentário. |
 
-```bash
-# 3. Subir apenas os containers do MongoDB (via Docker Compose)
-#    (para rodar TUDO em containers, veja a seção "Docker")
-docker compose up -d mongodb mongodb-init mongo-express
+## O que mudou na API
 
-# 4. Gerar o cliente Prisma
-npx prisma generate
+Estes ajustes deixaram a API pronta para o app mobile:
 
-# 5. Sincronizar o schema com o banco
-npx prisma db push
+- **Token Bearer.** O login devolve o JWT no corpo. O app manda `Authorization: Bearer <token>`. O site segue usando o cookie.
+- **Login diz quem é a pessoa.** A resposta traz `user` com `id`, `name`, `role`, `authorId` e `studentId`. Com isso o app sabe o que mostrar.
+- **Matéria do post.** Todo post tem `category` (Matemática, Português etc.). Sem categoria, vira `GERAL`.
+- **Primeiro acesso.** Professor novo nasce com uma senha padrão. Ele só entra depois de criar a própria senha.
+- **Desativar professor.** O admin pode tirar o acesso sem apagar os posts.
+- **Remover professor com posts é bloqueado.** A API responde `409` e sugere desativar.
+- **Cadastro de estudante.** Rota pública. O estudante escolhe a senha e já sai logado.
+- **Meus dados.** O estudante edita nome, e-mail e senha.
+- **Gestão de estudantes.** O admin lista, edita, reseta a senha e exclui.
+- **Comentários.** Estudante comenta. Dono edita. Dono, professor do post ou admin apaga.
+- **Admin criado sozinho.** Ao subir, a API cria o admin do `.env` se o banco não tiver nenhum.
+- **Erro de dado é `400`, nunca `401`.** Senha atual errada, por exemplo, vem como erro de campo. O app trata `401` como sessão vencida e desloga.
 
-# 6. Rodar o servidor de desenvolvimento
-#    (ao subir, cria o ADMIN do .env se o banco ainda não tiver nenhum ADMIN)
-npm run dev
-```
+## Como rodar
 
-Esse comando baixa as imagens `mongo:7` e `mongo-express:1` (caso ainda não existam localmente) e sobe três containers: o MongoDB (`techchallenge3-mongodb`, já configurado como replica set de nó único, requisito do Prisma para transações), um container auxiliar que inicializa esse replica set (`techchallenge3-mongodb-init`) e o [Mongo Express](https://github.com/mongo-express/mongo-express) (`techchallenge3-mongo-express`, interface web em [http://localhost:8082](http://localhost:8082) para inspecionar o banco). Se estiver usando essa infraestrutura local, aponte `DATABASE_URL` para `mongodb://localhost:27018/techchallenge3?replicaSet=rs0`. Caso já tenha uma instância própria do MongoDB (local ou Atlas), pule este passo e aponte `DATABASE_URL` diretamente para ela.
+Você precisa de [Node.js](https://nodejs.org) 20+ e [Docker](https://www.docker.com/).
 
-A aplicação fica disponível em [http://localhost:3000](http://localhost:3000). Faça login com o e-mail/senha definidos em `ADMIN_EMAIL`/`ADMIN_PASSWORD` para acessar `/admin` e cadastrar professores(as). Cada professor(a) cadastrado(a) define a própria senha no primeiro acesso (pelo app ou por `POST /api/auth/first-access`) e então pode fazer login e acessar `/area-professor` para publicar posts.
-
-**Outros scripts disponíveis**
-
-| Comando | Descrição |
-| --- | --- |
-| `npm run dev` | Sobe o servidor de desenvolvimento (Turbopack) |
-| `npm run build` | Gera o build de produção |
-| `npm run start` | Sobe o servidor a partir do build de produção |
-| `npm run lint` | Executa o ESLint no projeto |
-| `npm run typecheck` | Gera os tipos de rotas do Next (`next typegen`) e roda o `tsc --noEmit` |
-
-## Docker
-
-A aplicação inteira (Next.js + MongoDB) sobe com **um único comando**, sem precisar de Node.js instalado na máquina — só do [Docker](https://www.docker.com/):
+### Opção 1: tudo no Docker (mais fácil)
 
 ```bash
 docker compose up -d --build
 ```
 
-Depois disso a aplicação fica em [http://localhost:3000](http://localhost:3000) e o Mongo Express em [http://localhost:8082](http://localhost:8082) (usuário/senha `admin`/`admin`). Para derrubar tudo: `docker compose down` (adicione `-v` para apagar também os dados do banco).
+Pronto. Site e API em [http://localhost:3000](http://localhost:3000). Mongo Express (para ver o banco) em [http://localhost:8082](http://localhost:8082).
 
-O `docker-compose.yml` orquestra os serviços nesta ordem:
+Para parar: `docker compose down`. Use `-v` para apagar o banco também.
 
-| Serviço | O que faz |
+Antes, crie o `.env` com pelo menos `DEFAULT_TEACHER_PASSWORD`. Sem ela o Compose não sobe. As outras variáveis têm valor padrão de desenvolvimento no `docker-compose.yml`.
+
+> Mudou uma rota? Rode `docker compose up -d --build app`. O container usa a imagem buildada, não o código ao vivo.
+
+### Opção 2: Node na máquina, banco no Docker
+
+```bash
+npm install
+docker compose up -d mongodb mongodb-init mongo-express
+npx prisma generate
+npx prisma db push
+npm run dev
+```
+
+Nesse caso, use `DATABASE_URL=mongodb://localhost:27018/techchallenge3?replicaSet=rs0`.
+
+### Variáveis do `.env`
+
+| Variável | Para que serve |
 | --- | --- |
-| `mongodb` | MongoDB 7 como replica set de nó único (exigido pelo Prisma para transações), exposto em `localhost:27018` |
-| `mongodb-init` | Inicializa o replica set, espera o nó virar primário e encerra |
-| `migrate` | Roda `prisma db push` (sincroniza o schema) e encerra |
-| `app` | A aplicação Next.js em produção, na porta `3000`, com healthcheck. Ao subir, cria o admin se o banco não tiver nenhum `ADMIN` |
-| `mongo-express` | Interface web para inspecionar o banco |
+| `DATABASE_URL` | Endereço do MongoDB. |
+| `SESSION_SECRET` | Segredo que assina o JWT. Use um texto longo e aleatório. |
+| `ADMIN_EMAIL`, `ADMIN_PASSWORD`, `ADMIN_NAME` | Dados do admin criado ao subir, se o banco não tiver nenhum. |
+| `DEFAULT_TEACHER_PASSWORD` | Senha padrão de professor novo e de estudante resetado (mín. 8 caracteres). |
+| `INTERNAL_API_URL` | Opcional. URL que o servidor usa para chamar a própria API. |
+| `COOKIE_SECURE` | Opcional. `false` libera o cookie sem HTTPS. |
 
-O `Dockerfile` é *multi-stage*: um estágio instala as dependências (`npm ci`), outro gera o Prisma Client e roda o `next build` com `output: "standalone"`, e o estágio final (`runner`) leva só o servidor mínimo gerado pelo Next, sem devDependencies, executando como usuário não-root. O serviço `migrate` reaproveita o estágio de build, que já contém o Prisma CLI.
+### Scripts
 
-**Variáveis de ambiente no Docker:** o Compose já define `DATABASE_URL` apontando para o container do MongoDB. `SESSION_SECRET`, `ADMIN_EMAIL`, `ADMIN_PASSWORD` e `ADMIN_NAME` são lidos do `.env` da raiz, se existir; caso contrário são usados valores padrão de desenvolvimento (admin `admin@techchallenge.com` / `admin123`). `DEFAULT_TEACHER_PASSWORD` **não tem valor padrão**: defina-a no `.env`, ou qualquer comando `docker compose` falha com "Defina DEFAULT_TEACHER_PASSWORD no .env". No CI, o workflow define um valor descartável. Duas variáveis extras existem para rodar em produção sem HTTPS:
-
-| Variável | Descrição |
+| Comando | O que faz |
 | --- | --- |
-| `INTERNAL_API_URL` | URL usada pelo servidor para chamar as próprias rotas `/api` (no container: `http://localhost:3000`). Se ausente, é derivada do host da requisição |
-| `COOKIE_SECURE` | `false` permite o cookie de sessão sem HTTPS. Se ausente, o cookie é `secure` apenas em produção |
+| `npm run dev` | Servidor de desenvolvimento |
+| `npm run build` / `npm run start` | Build e servidor de produção |
+| `npm run lint` | ESLint |
+| `npm run typecheck` | Gera os tipos das rotas e roda o `tsc` |
 
-## Integração contínua (GitHub Actions)
+### Postman
 
-O workflow [`.github/workflows/ci.yml`](.github/workflows/ci.yml) roda a cada push e pull request na `master` (e pode ser disparado manualmente na aba *Actions*). Ele tem dois jobs:
+A coleção pronta fica em [`postman/TechChallenge3.postman_collection.json`](postman/TechChallenge3.postman_collection.json). Importe no Postman. Ela já usa o token Bearer.
 
-1. **Lint, type-check e build** — `npm ci`, `prisma generate`, `npm run lint`, `npm run typecheck` (`next typegen` + `tsc --noEmit`) e `npm run build`.
-2. **Docker build + smoke test** — só roda se o primeiro passar: constrói as imagens, sobe a stack completa com `docker compose up --wait` e faz requisições a `/`, `/api/post` e `/api/author`, exibindo os logs dos containers caso algo falhe.
+## Como funciona o login
 
-## Telas
+1. `POST /api/auth/login` confere e-mail e senha (hash com `bcryptjs`).
+2. Se der certo, a API cria um JWT de 7 dias (`jose`).
+3. O token vai no corpo (`token`) e também num cookie `session`.
+4. Nas rotas protegidas, mande o header `Authorization: Bearer <token>` ou o cookie. O header ganha se vierem os dois.
 
-### Página inicial (`/`) — pública
-
-Cabeçalho com alternância de tema e, dependendo da sessão, um botão de login (visitante) ou o menu do usuário logado (nome, atalho para o dashboard do seu papel e "Sair"). Abaixo, a listagem de todos os posts cadastrados, exibindo título e um resumo do conteúdo, com dois controles de filtragem combináveis:
-
-- um **select** com a lista de professores(as), que restringe os posts ao(à) autor(a) selecionado(a);
-- um **campo de busca** por palavra-chave, que filtra por título, texto ou nome do(a) professor(a).
-
-Os posts aparecem do mais recente para o mais antigo.
-
-Ao clicar em um post, o(a) usuário(a) é levado(a) à página de detalhe.
-
-### Detalhe do post (`/:id`) — pública
-
-Exibe o título, o conteúdo completo e o nome do(a) professor(a) responsável pelo post, com um link de retorno para a página inicial. Caso o `id` da URL não corresponda a nenhum post existente, o(a) usuário(a) é redirecionado(a) para a página inicial.
-
-### Área administrativa (`/admin`) — requer papel `ADMIN`
-
-Tem duas abas, cada uma com a quantidade no título. **Professores** lista todos(as) os(as) professores(as) cadastrados(as) e oferece um botão que abre um modal de cadastro de novo(a) professor(a) (nome e e-mail; a conta nasce com a senha padrão). O cadastro cria, em uma única ação, a conta de acesso (`User` com papel `AUTHOR`) e o perfil de autor (`Author`) vinculado a ela. **Estudantes** lista, por nome, os(as) estudantes que criaram conta pelo app (`POST /api/student`), só para consulta.
-
-### Área do(a) professor(a) (`/area-professor`) — requer papel `AUTHOR`
-
-Um botão abre um modal de criação de post (título, conteúdo e matéria, com "Geral" pré-selecionado). O modal de edição também permite trocar a matéria, abrindo com a matéria atual do post. Abaixo, a lista dos posts do próprio professor(a) logado(a) — nunca de outros(as) —, cada um com botões para editar (modal pré-preenchido) ou excluir (com confirmação).
-
-> Não existe hoje uma tela própria para o papel `STUDENT`: um(a) estudante autenticado(a) enxerga o mesmo cabeçalho/menu de usuário logado, mas navega pela aplicação como um visitante — só as páginas públicas.
-
-## Endpoints (API Reference)
-
-Além de consumida pelo próprio front-end (via Server Actions e serviços client-side), a API REST em `/api` pode ser usada por qualquer cliente HTTP. A sessão é enviada via cookie `session` (definido no login); rotas marcadas como autenticadas exigem esse cookie.
-
-### Autenticação — `/api/auth`
-
-| Método | Rota | Auth | Corpo da requisição | Resposta |
-| --- | --- | --- | --- | --- |
-| `POST` | `/api/auth/login` | Pública | `{ "email": string, "password": string }` | `200` — `{ message, token, tokenType: "Bearer", expiresAt, user: { id, name, role, authorId, studentId } }` (também define o cookie `session`) · `400` erros de validação · `401` credenciais inválidas · `403` conta desativada ou primeiro acesso pendente (não cria sessão; veja abaixo) |
-| `POST` | `/api/auth/first-access` | Pública | `{ "email": string, "currentPassword": string, "password": string (mín. 8), "confirmPassword": string }` | `200` — mesmo formato do login (também define o cookie `session`) · `400` validação · `401` credenciais inválidas · `403` conta desativada · `409` senha já definida |
-| `POST` | `/api/auth/logout` | Pública | — | `200` — `{ message }` (remove o cookie `session`) |
-
-**Respostas `403` do login:**
-
-```json
-{ "error": "Conta desativada. Fale com a coordenação." }
-```
-
-```json
-{ "error": "Primeiro acesso: defina sua senha no app.", "code": "FIRST_ACCESS_REQUIRED" }
-```
-
-**Primeiro acesso** (`POST /api/auth/first-access`): ao receber `code: "FIRST_ACCESS_REQUIRED"`, o cliente pede a nova senha e chama esta rota, informando a senha padrão em `currentPassword`. As checagens seguem esta ordem:
-
-| # | Situação | Resposta |
-| --- | --- | --- |
-| 1 | Corpo inválido (senhas diferentes: `confirmPassword`, "As senhas não coincidem."; menos de 8 caracteres: `password`) | `400` `{ "errors": { ... } }` |
-| 2 | Usuário inexistente ou `currentPassword` errada | `401` `{ "error": "E-mail ou senha inválidos." }` |
-| 3 | Conta desativada | `403` `{ "error": "Conta desativada. Fale com a coordenação." }` |
-| 4 | `firstAccess` diferente de `true` | `409` `{ "error": "A senha já foi definida. Entre com sua senha." }` |
-| 5 | Nova senha igual à atual | `400` `{ "errors": { "password": ["Escolha uma senha diferente da senha padrão."] } }` |
-| 6 | Tudo certo | `200` com a resposta do login: grava o novo hash e `firstAccess: false`, e o app já entra sem novo login |
-
-**Autenticando fora do front-end (Postman, curl, mobile):** faça o login, pegue o `token` da resposta e envie-o no header `Authorization` das rotas protegidas:
+O logout só apaga o cookie. Quem usa Bearer só precisa jogar o token fora.
 
 ```bash
-# 1. Login: a resposta traz o JWT em "token"
-curl -X POST http://localhost:3000/api/auth/login   -H "Content-Type: application/json"   -d '{"email":"admin@techchallenge.com","password":"admin123"}'
-
-# 2. Rota protegida com Bearer token
-curl -X POST http://localhost:3000/api/author   -H "Authorization: Bearer <token>"   -H "Content-Type: application/json"   -d '{"name":"Prof. Ana","email":"ana@escola.com"}'
-```
-
-Uma coleção pronta do Postman, já configurada com Bearer token e com todos os endpoints, está em [`postman/TechChallenge3.postman_collection.json`](postman/TechChallenge3.postman_collection.json) (Postman › *Import*).
-
-### Estudantes — `/api/student`
-
-| Método | Rota | Auth | Corpo da requisição | Resposta |
-| --- | --- | --- | --- | --- |
-| `POST` | `/api/student` | Pública | `{ "name": string, "email": string, "password": string (mín. 8), "confirmPassword": string }` | `201` — mesmo formato do login (também define o cookie `session`) · `400` validação · `409` e-mail já cadastrado |
-| `GET` | `/api/student/me` | **STUDENT** | — | `200` — `{ name, email }` · `401` sem sessão · `403` não é estudante |
-| `PUT` | `/api/student/me` | **STUDENT** | `{ "name": string, "email": string, "currentPassword"?: string, "password"?: string (mín. 8), "confirmPassword"?: string }` | `200` — `{ user: { id, name, role, authorId: null } }` · `400` validação ou senha atual ausente/incorreta · `401` sem sessão · `403` não é estudante · `409` e-mail já usado |
-| `GET` | `/api/student` | **ADMIN** | — | `200` — `[{ id, name, email, createdAt }]` por nome · `401` sem sessão · `403` não é admin |
-| `PUT` | `/api/student/[id]` | **ADMIN** | `{ "name": string, "email": string }` | `200` — `{ data: { id, name, email, createdAt } }` · `400` validação · `401` · `403` · `404` · `409` e-mail já usado |
-| `DELETE` | `/api/student/[id]` | **ADMIN** | — | `200` — `{ message }` (apaga `Student` e `User`) · `401` · `403` · `404` |
-| `POST` | `/api/student/[id]/reset-password` | **ADMIN** | — | `200` — `{ message }` (senha padrão + primeiro acesso) · `401` · `403` · `404` · `500` senha padrão não configurada |
-
-- Cria a conta `User` (papel `STUDENT`) e o perfil `Student` numa única operação, então não sobra conta sem perfil. Não existe senha padrão nem primeiro acesso: a senha é a que o estudante escolheu.
-- `name`, `email` e as senhas passam por `trim`. Uma senha só de espaços não tem 8 caracteres e responde `400`.
-- A resposta nunca traz hash nem e-mail. `user.authorId` é sempre `null`, porque estudante não tem perfil de autor. `user.studentId` é o id do perfil `Student`.
-
-**Resposta `201`:**
-
-```json
-{
-  "message": "Login realizado com sucesso!",
-  "token": "eyJhbGciOiJIUzI1NiJ9...",
-  "tokenType": "Bearer",
-  "expiresAt": "2026-11-20T12:00:00.000Z",
-  "user": { "id": "6650f1c2a1b2c3d4e5f60720", "name": "Lia Souza", "role": "STUDENT", "authorId": null, "studentId": "6650f1c2a1b2c3d4e5f60730" }
-}
-```
-
-**Erros:**
-
-```json
-{ "errors": { "confirmPassword": ["As senhas não coincidem."] } }
-```
-
-`400`: cada campo inválido aparece em `errors` (`name`: "Informe o nome."; `email`: "Informe um e-mail válido."; `password`: "A senha deve ter pelo menos 8 caracteres."). Um corpo que não é JSON responde `400` `{ "errors": {} }`.
-
-```json
-{ "error": "Já existe uma conta com esse e-mail." }
-```
-
-`409`: o e-mail já pertence a outra conta (estudante, professor ou admin), inclusive quando dois cadastros com o mesmo e-mail chegam ao mesmo tempo.
-
-```bash
-curl -X POST http://localhost:3000/api/student   -H "Content-Type: application/json"   -d '{"name":"Lia Souza","email":"lia@escola.com","password":"minhasenha123","confirmPassword":"minhasenha123"}'
-```
-
-**Meus dados** (`GET`/`PUT /api/student/me`): tela "Meus dados" do app. As duas rotas exigem o token de um estudante:
-
-- sem sessão (sem token, token inválido/vencido, conta excluída ou desativada): `401` `{ "error": "Você precisa estar logado." }`;
-- sessão de outro papel (professor, admin): `403` `{ "error": "Apenas estudantes têm esta página." }`.
-
-`GET` responde `200` `{ "name": "Lia Souza", "email": "lia@escola.com" }`.
-
-`PUT` sempre recebe `name` e `email`. Para trocar a senha, envie também `password` e `confirmPassword`; sem elas (ou vazias), a senha continua a mesma. As checagens seguem esta ordem:
-
-| # | Situação | Resposta |
-| --- | --- | --- |
-| 1 | Corpo inválido (`name` vazio, `email` inválido, `password` com menos de 8 caracteres, senhas diferentes em `confirmPassword`) | `400` `{ "errors": { ... } }` |
-| 2 | E-mail mudou ou veio senha nova, sem `currentPassword` | `400` `{ "errors": { "currentPassword": ["Informe a senha atual."] } }` |
-| 3 | `currentPassword` errada | `400` `{ "errors": { "currentPassword": ["Senha atual incorreta."] } }` |
-| 4 | E-mail novo já usado por outra conta (inclusive em cadastros simultâneos) | `409` `{ "error": "Já existe uma conta com esse e-mail." }` |
-| 5 | Tudo certo | `200` `{ "user": { "id": "...", "name": "Lia Souza", "role": "STUDENT", "authorId": null } }` |
-
-- Senha atual errada responde **`400`, não `401`**: o app trata `401` como sessão vencida e desloga a pessoa.
-- Só trocar o nome não pede `currentPassword`. O nome é gravado no `User` e no `Student` numa única transação.
-- O token continua valendo depois da edição, mesmo trocando e-mail ou senha: ele guarda só `userId` e `role`. Outras sessões abertas também continuam válidas.
-- A resposta nunca traz hash.
-
-```bash
-curl -X PUT http://localhost:3000/api/student/me   -H "Authorization: Bearer <token>"   -H "Content-Type: application/json"   -d '{"name":"Lia Souza","email":"lia.nova@escola.com","currentPassword":"minhasenha123"}'
-```
-
-**Gestão pelo admin** (`GET /api/student`, `PUT`/`DELETE /api/student/[id]`, `POST /api/student/[id]/reset-password`): aba Estudantes do app. Todas exigem token de **ADMIN**:
-
-- sem sessão: `401` `{ "error": "Você precisa estar logado." }`;
-- outro papel: `403` `{ "error": "Apenas administradores podem gerenciar estudantes." }` (na listagem: `"Apenas administradores podem ver os estudantes."`);
-- `id` que não é ObjectId ou estudante inexistente: `404` `{ "error": "Estudante não encontrado." }`.
-
-O `id` é o do `Student`, o mesmo que vem na listagem.
-
-- **Editar** troca nome e e-mail (`User` e `Student` numa transação) e **não mexe na senha**. Repetir o e-mail atual não dá `409`.
-- **Resetar senha** grava o hash de `DEFAULT_TEACHER_PASSWORD` e marca `firstAccess: true`: no próximo login o estudante recebe `403` `FIRST_ACCESS_REQUIRED` e cria outra senha, como o professor novo. Uma sessão já aberta continua valendo até vencer.
-- **Excluir** apaga o `Student` e o `User` numa transação: a pessoa não entra mais.
-
-```bash
-curl -X PUT http://localhost:3000/api/student/<id>   -H "Authorization: Bearer <token-admin>"   -H "Content-Type: application/json"   -d '{"name":"Lia Souza","email":"lia@escola.com"}'
-```
-
-### Autores — `/api/author`
-
-| Método | Rota | Auth | Corpo da requisição | Resposta |
-| --- | --- | --- | --- | --- |
-| `GET` | `/api/author` | Pública | — | `200` — array de `Author` **ordenado por nome**, cada item com `postCount` (quantidade de posts do professor) e `active` (conta ativa ou desativada) |
-| `POST` | `/api/author` | **ADMIN** | `{ "name": string, "email": string }` — a conta nasce com a senha padrão e `firstAccess: true`; um `password` enviado é ignorado | `201` — `{ data, message }` · `400` validação · `401` sem sessão · `403` não é admin · `409` e-mail já cadastrado · `500` `{ "error": "Senha padrão não configurada no servidor." }` (`DEFAULT_TEACHER_PASSWORD` ausente ou com menos de 8 caracteres; nada é criado) |
-| `GET` | `/api/author/:id` | Pública | — | `200` — `Author` no mesmo formato da listagem (com `postCount` e `active`) · `404` se não encontrado ou id inválido |
-| `PUT` | `/api/author/:id` | **ADMIN** | `{ "name": string }` | `200` — `{ data, message }` · `400` · `401` sem sessão · `403` não é admin · `404` |
-| `DELETE` | `/api/author/:id` | **ADMIN** | — | `200` — `{ "message": "Professor removido com sucesso!" }` · `401` sem sessão · `403` não é admin · `404` · `409` professor com posts |
-| `PATCH` | `/api/author/:id/status` | **ADMIN** | `{ "active": boolean }` | `200` — `{ data, message }` (`"Professor desativado."` / `"Professor reativado."`) · `400` corpo inválido · `401` sem sessão · `403` não é admin · `404` não encontrado ou id inválido · `409` professor sem conta de login |
-
-**Listagem** (`GET /api/author`):
-
-```json
-[
-  { "id": "6650f1c2a1b2c3d4e5f60719", "name": "Ana Silva", "userId": "6650f1c2a1b2c3d4e5f60718", "createdAt": "...", "updatedAt": "...", "postCount": 3, "active": true }
-]
-```
-
-`active` é `false` quando a conta de login do professor está desativada, e `true` para professores sem conta de login (`userId` vazio). Os dados da conta (`user`, e-mail, hash) nunca são devolvidos.
-
-**Desativar / reativar professor** (`PATCH /api/author/:id/status`):
-
-- `{ "active": false }` grava `User.deactivatedAt` com a data atual; `{ "active": true }` limpa o campo. Qualquer outro corpo responde `400` `{ "error": "Envie { active: true } ou { active: false }." }`.
-- O professor desativado não consegue mais entrar: o login responde `403` e tokens e cookies já emitidos passam a dar `401`. **Os posts dele continuam publicados**, com o nome dele.
-- Repetir a mesma ação (desativar quem já está desativado) não é erro: responde `200`. A data da primeira desativação é mantida.
-- Professor sem conta de login (`userId` vazio) responde `409` `{ "error": "Este professor não tem conta de login para desativar." }`.
-- `403` sem ser ADMIN: `{ "error": "Apenas administradores podem desativar professores." }`.
-- Resposta `200`, com `data` no mesmo formato de um item da listagem:
-  ```json
-  {
-    "data": { "id": "6650f1c2a1b2c3d4e5f60719", "name": "Ana Silva", "userId": "6650f1c2a1b2c3d4e5f60718", "createdAt": "...", "updatedAt": "...", "postCount": 3, "active": false },
-    "message": "Professor desativado."
-  }
-  ```
-
-> No MongoDB, documentos antigos não têm o campo `deactivatedAt`, e um filtro `where: { deactivatedAt: null }` não os encontra. Por isso o status é sempre lido em JavaScript (`!user.deactivatedAt`), nunca filtrado no banco.
-
-**Remoção de professor** (`DELETE /api/author/:id`):
-
-- Se o professor tem posts, a remoção é bloqueada com `409`, porque todo post exige um autor. Para tirar o acesso dele mantendo os posts, desative-o:
-  ```json
-  { "error": "Este professor tem 3 posts. Desative o professor para manter os posts publicados.", "postCount": 3 }
-  ```
-  A mensagem usa "1 post" no singular.
-- Sem posts, o perfil `Author` **e** a conta de login (`User`) ligada a ele são apagados juntos, numa única transação. Depois disso, o login com o e-mail dele responde `401`.
-
-**`401` x `403` nas rotas protegidas** (`/api/author` e `/api/author/:id` de escrita, `PUT`/`DELETE /api/post/:id`):
-
-- `401` `{ "error": "Você precisa estar logado." }`: não há sessão. Falta o header `Authorization`/cookie, o token é inválido ou expirou, ou a conta foi desativada. O cliente deve mandar a pessoa para o login.
-- `403`: há sessão, mas sem permissão (ex.: professor tentando remover outro professor ou editar o post de outra pessoa).
-
-**Id inválido:** nas rotas `/api/author/:id` e `/api/post/:id`, um id que não é ObjectId (24 caracteres hexadecimais) responde `404` em JSON, com a mesma mensagem de "não encontrado" (`Autor não encontrado.` / `Post não encontrado.`).
-
-### Posts — `/api/post`
-
-| Método | Rota | Auth | Corpo / query | Resposta |
-| --- | --- | --- | --- | --- |
-| `GET` | `/api/post` | Pública | Query params opcionais e combináveis (E): `q` (busca em `title`, `text` **e no nome do(a) autor(a)**, case-insensitive) e `authorId` (filtra por autor) | `200` — array de `Post`, **do mais recente para o mais antigo** (`createdAt` desc), cada um com `category` e `authors` embutido |
-| `POST` | `/api/post` | **AUTHOR** (usuário logado com perfil de `Author`) | `{ "title": string, "text": string, "category"?: Category }` — o `authorId` é sempre resolvido a partir da sessão, nunca aceito no corpo | `201` — `{ data, message }` · `400` validação (categoria inválida: `{ "errors": { "category": [...] } }`) · `401` sem sessão · `403` sem perfil de autor |
-| `GET` | `/api/post/:id` | Pública | — | `200` — `Post` (com `category`) · `404` se não encontrado ou id inválido |
-| `PUT` | `/api/post/:id` | **ADMIN ou o(a) autor(a) dono(a) do post** | `{ "title": string, "text": string, "category"?: Category }` | `200` — `{ data, message }` · `400` (categoria inválida: `{ "error": "Categoria inválida." }`) · `401` sem sessão · `403` não é o autor nem ADMIN · `404` |
-| `DELETE` | `/api/post/:id` | **ADMIN ou o(a) autor(a) dono(a) do post** | — | `200` — `{ message }` · `401` sem sessão · `403` não é o autor nem ADMIN · `404` |
-| `GET` | `/api/post/:id/comment` | Pública | — | `200` — comentários do post, do mais antigo para o mais novo: `[{ id, text, postId, studentId, createdAt, updatedAt, student: { id, name } }]` · `404` post inexistente |
-| `POST` | `/api/post/:id/comment` | **STUDENT** | `{ "text": string }` (1–1000, com trim) | `201` — `{ data: comentário, message }` · `400` `{ errors: { text } }` · `401` sem sessão · `403` não é estudante · `404` post inexistente |
-| `PUT` | `/api/comment/:id` | Dono do comentário | `{ "text": string }` | `200` — `{ data: comentário, message }` · `400` · `401` · `403` não é o dono · `404` |
-| `DELETE` | `/api/comment/:id` | Dono, professor dono do post ou ADMIN | — | `200` — `{ message }` · `401` · `403` · `404` |
-
-**Matéria do post (`category`)** — enum `Category`, aceito exatamente com estes valores:
-
-| Valor | Rótulo |
-| --- | --- |
-| `MATEMATICA` | Matemática |
-| `PORTUGUES` | Português |
-| `CIENCIAS` | Ciências |
-| `HISTORIA` | História |
-| `GEOGRAFIA` | Geografia |
-| `INGLES` | Inglês |
-| `ARTES` | Artes |
-| `EDUCACAO_FISICA` | Educação Física |
-| `GERAL` | Geral |
-
-- **Criação (`POST`)**: `category` é opcional; se vier ausente, o post é criado como `GERAL`.
-- **Edição (`PUT`)**: `category` é opcional; se vier ausente, a categoria atual do post é mantida.
-- Qualquer valor fora da lista retorna `400`.
-
-**Exemplo — busca pelo nome do autor** (`GET /api/post?q=silva`): devolve os posts cujo título ou texto contém "silva" **e** os posts de qualquer autor(a) com "silva" no nome.
-
-**Exemplo — login**
-
-```bash
-curl -i -X POST http://localhost:3000/api/auth/login \
+curl -X POST http://localhost:3000/api/auth/login \
   -H "Content-Type: application/json" \
-  -d '{"email": "professor@exemplo.com", "password": "minhasenha"}'
+  -d '{"email":"admin@techchallenge.com","password":"<sua-senha>"}'
 ```
 
 ```json
@@ -640,36 +126,170 @@ curl -i -X POST http://localhost:3000/api/auth/login \
   "token": "eyJhbGciOiJIUzI1NiJ9...",
   "tokenType": "Bearer",
   "expiresAt": "2026-11-09T12:00:00.000Z",
-  "user": {
-    "id": "6650f1c2a1b2c3d4e5f60718",
-    "name": "Ana Silva",
-    "role": "AUTHOR",
-    "authorId": "6650f1c2a1b2c3d4e5f60719",
-    "studentId": null
-  }
+  "user": { "id": "...", "name": "Ana Silva", "role": "AUTHOR", "authorId": "...", "studentId": null }
 }
 ```
 
-O objeto `user` identifica quem está logado e traz só estes cinco campos (nunca `hash` nem `email`):
+O `user` nunca traz e-mail nem hash. Compare `authorId` com `post.authorId` e `studentId` com `comment.studentId` para saber se o item é da pessoa.
 
-| Campo | Descrição |
+### Casos especiais
+
+- **Primeiro acesso.** Se a conta ainda usa a senha padrão, o login responde `403` com `code: "FIRST_ACCESS_REQUIRED"` e não cria sessão. O app chama `POST /api/auth/first-access` com a senha padrão e a nova. A resposta é igual à do login.
+- **Conta desativada.** O login responde `403` "Conta desativada. Fale com a coordenação.". Tokens antigos passam a dar `401` na hora. Essa checagem vem depois da senha, para não revelar se o e-mail existe.
+- **`401` ou `403`?** `401` = sem sessão (sem token, token vencido ou conta desativada). Mande para o login. `403` = tem sessão, mas não tem permissão.
+- **Id inválido.** Id que não é ObjectId responde `404`, igual a "não encontrado".
+
+### Proteção
+
+- Páginas: `src/proxy.ts` manda para `/` quem não tem o papel certo. `/admin` pede `ADMIN`. `/area-professor` pede `AUTHOR`.
+- API: cada rota checa a sessão sozinha com `getSession()`. Essa função também barra conta desativada.
+
+## Rotas da API
+
+Legenda: 🔓 pública · 🔑 precisa de login.
+
+### Login: `/api/auth`
+
+| Rota | Quem | Corpo | Respostas |
+| --- | --- | --- | --- |
+| `POST /api/auth/login` | 🔓 | `email`, `password` | `200` login · `400` campo · `401` e-mail ou senha errados · `403` desativado ou primeiro acesso |
+| `POST /api/auth/first-access` | 🔓 | `email`, `currentPassword`, `password` (mín. 8), `confirmPassword` | `200` login · `400` campo · `401` · `403` desativado · `409` senha já criada |
+| `POST /api/auth/logout` | 🔓 | — | `200` |
+
+No primeiro acesso, a nova senha não pode ser igual à padrão (`400` no campo `password`).
+
+### Posts: `/api/post`
+
+| Rota | Quem | Corpo | Respostas |
+| --- | --- | --- | --- |
+| `GET /api/post` | 🔓 | query `q` e `authorId` (opcionais) | `200` lista, mais novo primeiro |
+| `GET /api/post/:id` | 🔓 | — | `200` · `404` |
+| `POST /api/post` | 🔑 professor | `title`, `text`, `category?` | `201` · `400` · `401` · `403` |
+| `PUT /api/post/:id` | 🔑 dono ou admin | `title`, `text`, `category?` | `200` · `400` · `401` · `403` · `404` |
+| `DELETE /api/post/:id` | 🔑 dono ou admin | — | `200` · `401` · `403` · `404` |
+
+- `q` busca no título, no texto e no nome do professor. Não importa maiúscula ou minúscula.
+- O autor do post sai da sessão. A API ignora `authorId` no corpo.
+- `category` aceita: `MATEMATICA`, `PORTUGUES`, `CIENCIAS`, `HISTORIA`, `GEOGRAFIA`, `INGLES`, `ARTES`, `EDUCACAO_FISICA`, `GERAL`. Ao criar sem ela, vira `GERAL`. Ao editar sem ela, fica a atual.
+
+### Comentários
+
+| Rota | Quem | Corpo | Respostas |
+| --- | --- | --- | --- |
+| `GET /api/post/:id/comment` | 🔓 | — | `200` lista, mais antigo primeiro · `404` post não existe |
+| `POST /api/post/:id/comment` | 🔑 estudante | `text` (1 a 1000) | `201` · `400` · `401` · `403` · `404` |
+| `PUT /api/comment/:id` | 🔑 dono do comentário | `text` | `200` · `400` · `401` · `403` · `404` |
+| `DELETE /api/comment/:id` | 🔑 dono, professor do post ou admin | — | `200` · `401` · `403` · `404` |
+
+Cada comentário vem com `student: { id, name }`. O e-mail do estudante não aparece.
+
+### Professores: `/api/author`
+
+| Rota | Quem | Corpo | Respostas |
+| --- | --- | --- | --- |
+| `GET /api/author` | 🔓 | — | `200` lista por nome, com `postCount` e `active` |
+| `GET /api/author/:id` | 🔓 | — | `200` · `404` |
+| `POST /api/author` | 🔑 admin | `name`, `email` | `201` · `400` · `401` · `403` · `409` e-mail já usado · `500` senha padrão não configurada |
+| `PUT /api/author/:id` | 🔑 admin | `name` | `200` · `400` · `401` · `403` · `404` |
+| `PATCH /api/author/:id/status` | 🔑 admin | `{ "active": true }` ou `false` | `200` · `400` · `401` · `403` · `404` · `409` sem conta de login |
+| `DELETE /api/author/:id` | 🔑 admin | — | `200` · `401` · `403` · `404` · `409` tem posts |
+
+- Professor novo nasce com a senha padrão e precisa do primeiro acesso.
+- Desativar mantém os posts no ar, com o nome dele. Repetir a ação não dá erro.
+- Remover só funciona sem posts. Aí a conta de login some junto.
+
+### Estudantes: `/api/student`
+
+| Rota | Quem | Corpo | Respostas |
+| --- | --- | --- | --- |
+| `POST /api/student` | 🔓 | `name`, `email`, `password` (mín. 8), `confirmPassword` | `201` login · `400` · `409` e-mail já usado |
+| `GET /api/student/me` | 🔑 estudante | — | `200` `{ name, email }` · `401` · `403` |
+| `PUT /api/student/me` | 🔑 estudante | `name`, `email`, `currentPassword?`, `password?`, `confirmPassword?` | `200` · `400` · `401` · `403` · `409` |
+| `GET /api/student` | 🔑 admin | — | `200` lista por nome · `401` · `403` |
+| `PUT /api/student/:id` | 🔑 admin | `name`, `email` | `200` · `400` · `401` · `403` · `404` · `409` |
+| `DELETE /api/student/:id` | 🔑 admin | — | `200` · `401` · `403` · `404` |
+| `POST /api/student/:id/reset-password` | 🔑 admin | — | `200` · `401` · `403` · `404` · `500` |
+
+- No cadastro, o estudante escolhe a senha. Não tem senha padrão.
+- Em "Meus dados", trocar e-mail ou senha pede `currentPassword`. Só trocar o nome, não.
+- Senha atual errada responde `400` no campo `currentPassword`. Nunca `401`.
+- O token continua valendo depois de editar.
+- Resetar a senha volta para a senha padrão e liga o primeiro acesso.
+- O `:id` é o do `Student`, o mesmo da listagem.
+
+### Formato dos erros
+
+```json
+{ "errors": { "confirmPassword": ["As senhas não coincidem."] } }
+```
+
+`400` traz `errors` por campo. Os outros erros trazem só `error` com a mensagem.
+
+## Banco de dados
+
+MongoDB com Prisma. O schema completo está em [`prisma/schema.prisma`](prisma/schema.prisma).
+
+| Model | O que guarda |
 | --- | --- |
-| `id` | id do `User` |
-| `name` | nome do usuário (ex.: para exibir as iniciais) |
-| `role` | `ADMIN`, `AUTHOR` ou `STUDENT` (ex.: mostrar ou esconder o botão de criar post) |
-| `authorId` | id do registro `Author` ligado ao usuário (compare com `post.authorId` para saber se o post é dele e liberar editar/excluir), ou `null` quando o usuário não tem perfil de professor(a) (alunos e admin sem perfil de autor) |
-| `studentId` | id do registro `Student` ligado ao usuário (compare com `comment.studentId` para saber se o comentário é dele e liberar editar/excluir), ou `null` quando o usuário não é estudante |
+| `User` | Login: e-mail, hash, `role`, `firstAccess`, `deactivatedAt`. |
+| `Author` | Perfil do professor. Ligado a um `User`. |
+| `Student` | Perfil do estudante. Ligado a um `User`. |
+| `Post` | Título, texto, `category` e um `Author`. |
+| `Comment` | Texto, um `Post` e um `Student`. Some se o post ou o estudante for apagado. |
 
-A resposta também inclui um header `Set-Cookie: session=...` — reenvie esse cookie nas próximas requisições (por exemplo, `curl -b cookies.txt -c cookies.txt ...`) ou use o `token` no header `Authorization: Bearer <token>` para acessar rotas autenticadas, como `POST /api/post`.
+Detalhes que confundem:
 
-## Roadmap / Melhorias futuras
+- O campo `Post.authors` está no plural, mas guarda um autor só.
+- Docs antigos no Mongo não têm `deactivatedAt`. Por isso o status é lido no código (`!user.deactivatedAt`), não filtrado no banco.
+- `User.origemId` existe no schema, mas nada usa.
 
-- [ ] Dashboard e tela de cadastro no site para o papel `STUDENT` (hoje o cadastro existe só na API, `POST /api/student`, usada pelo app mobile).
-- [ ] Telas administrativas para editar/excluir posts de qualquer autor (hoje essa permissão do `ADMIN` só existe via API, sem interface).
-- [ ] Invalidar o cache do TanStack Query ao criar um post (`ModalCreatePost` hoje usa `router.refresh()`, que não atualiza as listas que usam `useQuery`/`useMutation`) — pode exigir um reload manual para o novo post aparecer.
-- [ ] Paginação (ou scroll infinito) na listagem de posts.
-- [ ] Unificar a origem do tipo `Post` em `src/services/post.ts` (importado de `generated/prisma/browser`, enquanto o restante do projeto usa `generated/prisma/client`).
-- [ ] Testes automatizados (unitários para Route Handlers e end-to-end para os fluxos de login, criação/edição/exclusão de posts e autores).
-- [ ] Estados de carregamento e de erro explícitos nas páginas/listas que buscam dados assíncronos.
-- [ ] Implementar a criação dos perfis de Professor e Estudantes para receberem um e-mail e fazendo com que eles criem sua senha de acesso.
+## Estrutura de pastas
 
+```
+src/
+├── app/
+│   ├── api/            # Rotas da API (auth, author, post, comment, student)
+│   ├── admin/          # Tela do admin
+│   ├── area-professor/ # Tela do professor
+│   ├── [post]/         # Detalhe do post
+│   └── page.tsx        # Página inicial
+├── actions/            # Leitura de dados para Server Components
+├── services/           # fetch usado pelos Client Components (TanStack Query)
+├── lib/                # Sessão, Prisma, validação (Zod) e helpers da API
+├── instrumentation.ts  # Roda ao subir: cria o admin se faltar
+└── proxy.ts            # Protege as páginas por papel
+```
+
+O site não fala com o Prisma direto. Tudo passa pela API:
+
+```
+Página  →  actions/ ou services/  →  /api  →  Prisma  →  MongoDB
+```
+
+A única exceção é `src/app/area-professor/page.tsx`, que busca o `authorId` direto no Prisma.
+
+## Telas do site
+
+- **`/`** (pública): lista de posts com busca e filtro por professor. Tema claro e escuro.
+- **`/:id`** (pública): post completo.
+- **`/admin`** (admin): abas Professores (com cadastro) e Estudantes (só leitura).
+- **`/area-professor`** (professor): criar, editar e excluir os próprios posts, com matéria.
+
+O site não tem telas de estudante, de cadastro nem de primeiro acesso. Isso fica no app mobile.
+
+## CI
+
+O [GitHub Actions](.github/workflows/ci.yml) roda em cada push e PR na `master`:
+
+1. Lint, typecheck e build.
+2. Sobe tudo no Docker e testa `/`, `/api/post` e `/api/author`.
+
+## Próximos passos
+
+- [ ] Telas de estudante no site.
+- [ ] Telas para o admin editar ou excluir qualquer post.
+- [ ] Atualizar o cache do TanStack Query ao criar post (hoje pode pedir reload).
+- [ ] Paginação na lista de posts.
+- [ ] Testes automatizados.
+- [ ] Estados de carregando e de erro nas listas.
+- [ ] Enviar e-mail para professor e estudante criarem a senha.
